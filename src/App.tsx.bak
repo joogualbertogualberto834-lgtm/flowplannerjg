@@ -1,0 +1,1449 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  LayoutDashboard, 
+  BookOpen, 
+  RefreshCw, 
+  Layers, 
+  FileText, 
+  Calendar,
+  ChevronRight,
+  Plus,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  TrendingUp,
+  BrainCircuit,
+  ChevronDown,
+  Save,
+  Trash2,
+  RotateCcw,
+  CalendarX,
+  Zap,
+  BarChart2,
+  Timer,
+  Target,
+  Search,
+  Edit3,
+  X
+} from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  LineChart,
+  Line
+} from 'recharts';
+import { format, addDays, isAfter, isBefore, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { motion, AnimatePresence } from 'motion/react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+// Types
+interface Topic {
+  id: number;
+  specialty: string;
+  title: string;
+  current_interval: number;
+  last_score: number;
+  next_review_date: string | null;
+  urgency_count: number;
+  previous_state: string | null;
+  study_count: number;
+  card_count: number;
+}
+
+interface DashboardStats {
+  effort: { date: string; total_minutes: number; avg_score: number }[];
+  stats: { total_topics: number; high_perf: number; overdue: number };
+}
+
+interface Flashcard {
+  id: number;
+  topic_id: number;
+  topic_title?: string;
+  specialty?: string;
+  front: string;
+  back: string;
+  next_review: string | null;
+  last_difficulty: number | null;
+  current_interval: number;
+  repetition_level: number;
+}
+
+interface FlashcardStats {
+  dailyVolume: { date: string; count: number; total_minutes: number }[];
+  totals: { total_reviews: number; total_minutes: number };
+}
+
+interface ErrorNote {
+  id: number;
+  topic_id: number;
+  topic_title: string;
+  content: string;
+  tags: string;
+  created_at: string;
+}
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null);
+  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
+  const [allFlashcards, setAllFlashcards] = useState<Flashcard[]>([]);
+  const [flashcardStats, setFlashcardStats] = useState<FlashcardStats | null>(null);
+  const [errors, setErrors] = useState<ErrorNote[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch Data
+  const fetchData = async () => {
+    setLoading(true);
+    const fetchWithLog = async (url: string) => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        console.error(`Failed to fetch ${url}:`, err);
+        return null;
+      }
+    };
+
+    try {
+      const [topicsData, dashboardData, flashcardsData, allFlashcardsData, flashcardStatsData, errorsData] = await Promise.all([
+        fetchWithLog('/api/topics'),
+        fetchWithLog('/api/dashboard'),
+        fetchWithLog('/api/flashcards?mode=due'),
+        fetchWithLog('/api/flashcards/all'),
+        fetchWithLog('/api/flashcards/stats'),
+        fetchWithLog('/api/errors')
+      ]);
+      
+      if (topicsData) setTopics(topicsData);
+      if (dashboardData) setDashboardData(dashboardData);
+      if (flashcardsData) setFlashcards(flashcardsData);
+      if (allFlashcardsData) setAllFlashcards(allFlashcardsData);
+      if (flashcardStatsData) setFlashcardStats(flashcardStatsData);
+      if (errorsData) setErrors(errorsData);
+    } catch (err) {
+      console.error("Critical error in fetchData:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // Group topics by specialty
+  const groupedTopics = useMemo(() => {
+    return topics.reduce((acc, topic) => {
+      if (!acc[topic.specialty]) acc[topic.specialty] = [];
+      acc[topic.specialty].push(topic);
+      return acc;
+    }, {} as Record<string, Topic[]>);
+  }, [topics]);
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'dashboard': return <DashboardView data={dashboardData} topics={topics} onUpdate={fetchData} />;
+      case 'topics': return <TopicsView groupedTopics={groupedTopics} onUpdate={fetchData} />;
+      case 'reviews': return <ReviewsView topics={topics} onUpdate={fetchData} />;
+      case 'flashcards': return <FlashcardsView flashcards={flashcards} allFlashcards={allFlashcards} topics={topics} groupedTopics={groupedTopics} stats={flashcardStats} onUpdate={fetchData} />;
+      case 'errors': return <ErrorsView errors={errors} topics={topics} onUpdate={fetchData} />;
+      case 'weekly': return <WeeklyView topics={topics} />;
+      default: return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
+      {/* Sidebar */}
+      <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-50 hidden md:block">
+        <div className="p-6">
+          <div className="flex items-center gap-2 mb-8">
+            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
+              <BrainCircuit className="text-white w-5 h-5" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-800">MED-Flow</h1>
+          </div>
+          
+          <nav className="space-y-1">
+            <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+            <NavItem icon={<BookOpen size={20} />} label="Especialidades" active={activeTab === 'topics'} onClick={() => setActiveTab('topics')} />
+            <NavItem icon={<RefreshCw size={20} />} label="Revisões" active={activeTab === 'reviews'} onClick={() => setActiveTab('reviews')} />
+            <NavItem icon={<Layers size={20} />} label="Flashcards" active={activeTab === 'flashcards'} onClick={() => setActiveTab('flashcards')} />
+            <NavItem icon={<FileText size={20} />} label="Caderno de Erros" active={activeTab === 'errors'} onClick={() => setActiveTab('errors')} />
+            <NavItem icon={<Calendar size={20} />} label="Semana" active={activeTab === 'weekly'} onClick={() => setActiveTab('weekly')} />
+          </nav>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="md:ml-64 p-4 md:p-8">
+        <header className="mb-8 flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800 capitalize">{activeTab.replace('-', ' ')}</h2>
+            <p className="text-slate-500 text-sm">Organize seus estudos médicos com eficiência.</p>
+          </div>
+          <button 
+            onClick={fetchData}
+            className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-600"
+          >
+            <RefreshCw size={20} className={cn(loading && "animate-spin")} />
+          </button>
+        </header>
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            {renderTabContent()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+    </div>
+  );
+}
+
+function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+        active 
+          ? "bg-emerald-50 text-emerald-700 shadow-sm" 
+          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+// --- Sub-Views ---
+
+function DashboardView({ data, topics, onUpdate }: { data: DashboardStats | null, topics: Topic[], onUpdate: () => void }) {
+  if (!data) return null;
+
+  // Group upcoming reviews by date
+  const projections = topics
+    .filter(t => t.next_review_date)
+    .sort((a, b) => new Date(a.next_review_date!).getTime() - new Date(b.next_review_date!).getTime())
+    .reduce((acc, topic) => {
+      const dateKey = format(new Date(topic.next_review_date!), 'dd/MM');
+      const existing = acc.find(p => p.dateKey === dateKey);
+      if (existing) {
+        existing.topics.push(topic);
+      } else {
+        acc.push({ dateKey, topics: [topic], date: new Date(topic.next_review_date!) });
+      }
+      return acc;
+    }, [] as { dateKey: string, topics: Topic[], date: Date }[]);
+
+  return (
+    <div className="space-y-6">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          title="Total de Temas" 
+          value={data.stats.total_topics} 
+          icon={<BookOpen className="text-blue-600" />} 
+          color="blue" 
+        />
+        <StatCard 
+          title="Alta Performance" 
+          value={data.stats.high_perf} 
+          icon={<CheckCircle2 className="text-emerald-600" />} 
+          color="emerald" 
+        />
+        <StatCard 
+          title="Atrasados" 
+          value={data.stats.overdue} 
+          icon={<AlertCircle className="text-rose-600" />} 
+          color="rose" 
+        />
+        <StatCard 
+          title="Próximas 24h" 
+          value={topics.filter(t => t.next_review_date && isBefore(new Date(t.next_review_date), addDays(new Date(), 1))).length} 
+          icon={<Clock className="text-amber-600" />} 
+          color="amber" 
+        />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+              <TrendingUp size={20} className="text-emerald-600" />
+              Esforço Diário (min)
+            </h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.effort}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                  <XAxis dataKey="date" tickFormatter={(val) => format(new Date(val), 'dd/MM')} tick={{fontSize: 12}} axisLine={false} tickLine={false} />
+                  <YAxis tick={{fontSize: 12}} axisLine={false} tickLine={false} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Bar dataKey="total_minutes" fill="#10B981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <CasioStopwatch onSave={onUpdate} />
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
+            <Calendar size={20} className="text-blue-600" />
+            Projeção de Revisões
+          </h3>
+          <div className="space-y-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+            {projections.length > 0 ? (
+              projections.map(({ dateKey, topics: dateTopics, date }) => (
+                <div key={dateKey} className="flex items-start gap-3 p-2 hover:bg-slate-50 rounded-lg transition-colors border-b border-slate-100 last:border-0">
+                  <div className="flex flex-col items-center justify-center min-w-[48px] h-[48px] bg-blue-50 text-blue-600 rounded-xl font-bold">
+                    <span className="text-[10px] uppercase opacity-60 leading-none">{format(date, 'MMM', { locale: ptBR })}</span>
+                    <span className="text-lg leading-none">{format(date, 'dd')}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap gap-1">
+                      {dateTopics.map(t => (
+                        <span key={t.id} className="text-xs font-medium text-slate-700 bg-white px-2 py-0.5 rounded-full border border-slate-200 shadow-sm">
+                          {t.title}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-slate-400 text-sm italic text-center py-10">Nenhuma revisão agendada ainda.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CasioStopwatch({ onSave }: { onSave: () => void }) {
+  const [time, setTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRunning) {
+      interval = setInterval(() => {
+        setTime(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isRunning]);
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleSave = async () => {
+    if (time < 60) {
+      alert("Estude pelo menos 1 minuto para registrar.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const duration_minutes = Math.floor(time / 60);
+      const res = await fetch('/api/study-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration_minutes })
+      });
+
+      if (res.ok) {
+        setTime(0);
+        setIsRunning(false);
+        onSave();
+      }
+    } catch (err) {
+      console.error("Failed to save study log", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-slate-800 p-4 rounded-3xl border-4 border-slate-700 shadow-xl max-w-sm mx-auto overflow-hidden relative group">
+      {/* Casio Bezel Look */}
+      <div className="absolute top-2 left-4 text-[8px] text-slate-400 font-bold uppercase tracking-widest">Casio</div>
+      <div className="absolute top-2 right-4 text-[8px] text-slate-400 font-bold uppercase tracking-widest">Water Resist</div>
+      
+      <div className="mt-4 bg-[#94a3b8] p-4 rounded-lg border-4 border-slate-900 shadow-inner flex flex-col items-center">
+        <div className="w-full flex justify-between px-2 mb-1">
+          <span className="text-[10px] font-bold text-slate-800">ALM</span>
+          <span className="text-[10px] font-bold text-slate-800">SIG</span>
+          <span className="text-[10px] font-bold text-slate-800">PM</span>
+        </div>
+        
+        <div className="font-digital text-4xl md:text-5xl text-slate-900 tracking-tighter">
+          {formatTime(time)}
+        </div>
+        
+        <div className="w-full flex justify-center mt-2">
+          <div className="h-1 w-12 bg-slate-800/20 rounded-full" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mt-4">
+        <button
+          onClick={() => setIsRunning(!isRunning)}
+          className={cn(
+            "py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg",
+            isRunning 
+              ? "bg-rose-600 text-white shadow-rose-900/40" 
+              : "bg-emerald-600 text-white shadow-emerald-900/40"
+          )}
+        >
+          {isRunning ? "Stop" : "Start"}
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={isSaving || isRunning || time === 0}
+          className="py-3 bg-slate-200 text-slate-800 rounded-xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 shadow-lg shadow-slate-900/40"
+        >
+          {isSaving ? "Saving..." : "Log Time"}
+        </button>
+      </div>
+      
+      <div className="mt-3 flex justify-center gap-8">
+        <div className="flex flex-col items-center">
+          <div className="w-4 h-1 bg-slate-600 rounded-full mb-1" />
+          <span className="text-[8px] text-slate-500 font-bold uppercase">Mode</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <div className="w-4 h-1 bg-slate-600 rounded-full mb-1" />
+          <span className="text-[8px] text-slate-500 font-bold uppercase">Light</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ title, value, icon, color }: { title: string, value: number, icon: React.ReactNode, color: string }) {
+  const colors: Record<string, string> = {
+    blue: "bg-blue-50",
+    emerald: "bg-emerald-50",
+    rose: "bg-rose-50",
+    amber: "bg-amber-50"
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+      <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", colors[color])}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">{title}</p>
+        <p className="text-2xl font-bold text-slate-800">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function TopicsView({ groupedTopics, onUpdate }: { groupedTopics: Record<string, Topic[]>, onUpdate: () => void }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  const [score, setScore] = useState('');
+  const [duration, setDuration] = useState('30');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTopic) return;
+
+    await fetch('/api/study-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic_id: selectedTopic.id,
+        score: parseFloat(score),
+        duration_minutes: parseInt(duration)
+      })
+    });
+
+    setSelectedTopic(null);
+    setScore('');
+    await onUpdate();
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-4">
+      {Object.entries(groupedTopics).map(([specialty, topics]) => (
+        <div key={specialty} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+          <button 
+            onClick={() => setExpanded(expanded === specialty ? null : specialty)}
+            className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-8 bg-emerald-500 rounded-full" />
+              <span className="font-semibold text-slate-800">{specialty}</span>
+              <span className="text-xs bg-slate-100 px-2 py-1 rounded-full text-slate-500">
+                {topics.filter(t => t.last_score !== null).length} / {topics.length} vistos
+              </span>
+            </div>
+            <ChevronDown className={cn("text-slate-400 transition-transform", expanded === specialty && "rotate-180")} />
+          </button>
+          
+          <AnimatePresence>
+            {expanded === specialty && (
+              <motion.div 
+                initial={{ height: 0 }}
+                animate={{ height: 'auto' }}
+                exit={{ height: 0 }}
+                className="overflow-hidden border-t border-slate-100"
+              >
+                <div className="p-2 space-y-1">
+                  {topics.map(topic => (
+                    <div 
+                      key={topic.id}
+                      className="group flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <StatusIndicator topic={topic} />
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-slate-700">{topic.title}</span>
+                          {topic.next_review_date && (
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                              <Calendar size={10} />
+                              Revisão: {format(new Date(topic.next_review_date), 'dd/MM/yyyy')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {topic.previous_state && (
+                          <button 
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (!confirm('Desfazer o último registro de estudo para este tema?')) return;
+                              try {
+                                const res = await fetch('/api/study-session/undo', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ topic_id: topic.id })
+                                });
+                                if (res.ok) onUpdate();
+                              } catch (err) {
+                                console.error("Undo failed", err);
+                              }
+                            }}
+                            title="Desfazer último registro"
+                            className="w-10 h-10 flex items-center justify-center rounded-xl border-2 border-blue-600 text-rose-500 hover:bg-rose-50 transition-all"
+                          >
+                            <Trash2 size={20} />
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => setSelectedTopic(topic)}
+                          title="Registrar Estudo"
+                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all"
+                        >
+                          <Plus size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      ))}
+
+      {/* Study Modal */}
+      {selectedTopic && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl"
+          >
+            <h3 className="text-xl font-bold mb-2">Registrar Estudo</h3>
+            <p className="text-slate-500 text-sm mb-6">{selectedTopic.title}</p>
+            
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Percentual de Acertos (%)</label>
+                <input 
+                  type="number" 
+                  required 
+                  min="0" 
+                  max="100"
+                  value={score}
+                  onChange={e => setScore(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Ex: 85"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Duração (minutos)</label>
+                <input 
+                  type="number" 
+                  required 
+                  value={duration}
+                  onChange={e => setDuration(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setSelectedTopic(null)}
+                  className="flex-1 py-3 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 py-3 rounded-xl font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all"
+                >
+                  Salvar
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusIndicator({ topic }: { topic: Topic }) {
+  const isOverdue = topic.next_review_date && isBefore(new Date(topic.next_review_date), new Date());
+  const isSoon = topic.next_review_date && isBefore(new Date(topic.next_review_date), addDays(new Date(), 3));
+  
+  if (!topic.next_review_date) return <div className="w-2 h-2 rounded-full bg-slate-200" />;
+  if (isOverdue) return <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />;
+  if (isSoon) return <div className="w-2 h-2 rounded-full bg-amber-500" />;
+  return <div className="w-2 h-2 rounded-full bg-emerald-500" />;
+}
+
+function ReviewsView({ topics, onUpdate }: { topics: Topic[], onUpdate: () => void }) {
+  const overdue = topics
+    .filter(t => t.next_review_date && isBefore(new Date(t.next_review_date), new Date()))
+    .sort((a, b) => new Date(a.next_review_date!).getTime() - new Date(b.next_review_date!).getTime());
+
+  const upcoming = topics
+    .filter(t => t.next_review_date && isAfter(new Date(t.next_review_date), new Date()) && isBefore(new Date(t.next_review_date), addDays(new Date(), 7)))
+    .sort((a, b) => new Date(a.next_review_date!).getTime() - new Date(b.next_review_date!).getTime());
+
+  const nextMonths = topics
+    .filter(t => t.next_review_date && isAfter(new Date(t.next_review_date), addDays(new Date(), 7)))
+    .sort((a, b) => new Date(a.next_review_date!).getTime() - new Date(b.next_review_date!).getTime());
+
+  const groupedByMonth = useMemo(() => {
+    return nextMonths.reduce((acc, topic) => {
+      const date = new Date(topic.next_review_date!);
+      const monthYear = format(date, 'MMMM yyyy', { locale: ptBR });
+      if (!acc[monthYear]) acc[monthYear] = [];
+      acc[monthYear].push(topic);
+      return acc;
+    }, {} as Record<string, Topic[]>);
+  }, [nextMonths]);
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8">
+      <section>
+        <h3 className="text-lg font-bold text-rose-600 mb-4 flex items-center gap-2">
+          <AlertCircle size={20} />
+          Atrasados ({overdue.length})
+        </h3>
+        <div className="grid gap-3">
+          {overdue.map(topic => (
+            <ReviewCard key={topic.id} topic={topic} onUpdate={onUpdate} />
+          ))}
+          {overdue.length === 0 && <p className="text-slate-400 text-sm italic">Nenhuma revisão atrasada. Bom trabalho!</p>}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-lg font-bold text-amber-600 mb-4 flex items-center gap-2">
+          <Clock size={20} />
+          Próximos 7 dias ({upcoming.length})
+        </h3>
+        <div className="grid gap-3">
+          {upcoming.map(topic => (
+            <ReviewCard key={topic.id} topic={topic} onUpdate={onUpdate} />
+          ))}
+          {upcoming.length === 0 && <p className="text-slate-400 text-sm italic">Nada agendado para os próximos 7 dias.</p>}
+        </div>
+      </section>
+
+      <section className="space-y-6">
+        <h3 className="text-lg font-bold text-blue-600 mb-4 flex items-center gap-2">
+          <Calendar size={20} />
+          Próximos meses ({nextMonths.length})
+        </h3>
+        
+        {Object.entries(groupedByMonth).map(([month, monthTopics]) => (
+          <div key={month} className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">
+              {month}
+            </h4>
+            <div className="grid gap-3">
+              {(monthTopics as Topic[]).map(topic => (
+                <ReviewCard key={topic.id} topic={topic} onUpdate={onUpdate} />
+              ))}
+            </div>
+          </div>
+        ))}
+        
+        {nextMonths.length === 0 && <p className="text-slate-400 text-sm italic">Nenhuma revisão agendada para os próximos meses.</p>}
+      </section>
+    </div>
+  );
+}
+
+interface ReviewCardProps {
+  topic: Topic;
+  onUpdate: () => void;
+  key?: number;
+}
+
+function ReviewCard({ topic, onUpdate }: ReviewCardProps) {
+  const [showForm, setShowForm] = useState(false);
+  const [score, setScore] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await fetch('/api/study-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic_id: topic.id,
+        score: parseFloat(score),
+        duration_minutes: 20
+      })
+    });
+    setShowForm(false);
+    onUpdate();
+  };
+
+  return (
+    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-bold text-emerald-600 uppercase tracking-tighter">{topic.specialty}</p>
+          <h4 className="font-semibold text-slate-800">{topic.title}</h4>
+          <p className="text-xs text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+            <span>Último rendimento: <span className="font-bold">{topic.last_score !== null ? `${topic.last_score}%` : 'Não visto'}</span></span>
+            <span>•</span>
+            <span>Intervalo: <span className="font-bold">{topic.current_interval || 0} dias</span></span>
+            {topic.next_review_date && (
+              <>
+                <span>•</span>
+                <span className="flex items-center gap-1 text-blue-600 font-medium">
+                  <Calendar size={12} />
+                  Revisão: {format(new Date(topic.next_review_date), 'dd/MM/yyyy')}
+                </span>
+              </>
+            )}
+            {topic.urgency_count > 0 && (
+              <span className="px-2 py-0.5 bg-rose-100 text-rose-600 rounded-full text-[10px] font-bold uppercase flex items-center gap-1">
+                Urgência Nível {topic.urgency_count}
+                <span className="opacity-50">•</span>
+                {topic.study_count} revisões
+              </span>
+            )}
+            {topic.urgency_count === 0 && topic.study_count > 0 && (
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[10px] font-bold uppercase">
+                {topic.study_count} revisões
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {topic.previous_state && (
+            <button 
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!confirm('Desfazer o último registro de estudo?')) return;
+                const res = await fetch('/api/study-session/undo', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ topic_id: topic.id })
+                });
+                if (res.ok) await onUpdate();
+              }}
+              title="Desfazer último registro"
+              className="w-10 h-10 flex items-center justify-center rounded-xl border-2 border-blue-600 text-blue-600 hover:bg-blue-50 transition-all"
+            >
+              <RotateCcw size={20} />
+            </button>
+          )}
+          <button 
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!confirm('Remover este card das revisões? (O tema continuará existindo, mas a data de próxima revisão será limpa)')) return;
+              const res = await fetch('/api/study-session/clear-review', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic_id: topic.id })
+              });
+              if (res.ok) await onUpdate();
+            }}
+            title="Remover das revisões"
+            className="w-10 h-10 flex items-center justify-center rounded-xl border-2 border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 transition-all"
+          >
+            <CalendarX size={20} />
+          </button>
+          <button 
+            onClick={() => setShowForm(!showForm)}
+            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-medium hover:bg-slate-800 transition-colors"
+          >
+            Revisar
+          </button>
+        </div>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="mt-4 pt-4 border-t border-slate-100 flex gap-3">
+          <input 
+            type="number" 
+            placeholder="% Acertos"
+            value={score}
+            onChange={e => setScore(e.target.value)}
+            className="flex-1 px-4 py-2 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+          <button type="submit" className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-bold">Salvar</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function FlashcardsView({ flashcards, allFlashcards, topics, groupedTopics, stats, onUpdate }: { 
+  flashcards: Flashcard[], 
+  allFlashcards: Flashcard[],
+  topics: Topic[], 
+  groupedTopics: Record<string, Topic[]>, 
+  stats: FlashcardStats | null,
+  onUpdate: () => void 
+}) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [newCard, setNewCard] = useState({ topic_id: '', front: '', back: '' });
+  const [studySession, setStudySession] = useState<{ cards: Flashcard[], index: number, startTime: number } | null>(null);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [selectedTopicId, setSelectedTopicId] = useState<number | null>(null);
+  const [expandedSpecialty, setExpandedSpecialty] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredList = useMemo(() => {
+    let list = allFlashcards;
+    if (selectedTopicId) list = list.filter(c => c.topic_id === selectedTopicId);
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(c => c.front.toLowerCase().includes(q) || c.back.toLowerCase().includes(q));
+    }
+    return list;
+  }, [allFlashcards, selectedTopicId, searchQuery]);
+
+  useEffect(() => {
+    if (showAdd && selectedTopicId) {
+      setNewCard(prev => ({ ...prev, topic_id: String(selectedTopicId) }));
+    }
+  }, [showAdd, selectedTopicId]);
+
+  const [isAdding, setIsAdding] = useState(false);
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCard.topic_id) {
+      alert("Por favor, selecione um tema.");
+      return;
+    }
+    
+    setIsAdding(true);
+    const cardData = { 
+      ...newCard, 
+      topic_id: parseInt(newCard.topic_id) 
+    };
+    
+    try {
+      const res = await fetch('/api/flashcards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cardData)
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Server error");
+      }
+      
+      await onUpdate(); // Await the update to ensure data is fresh
+      setShowAdd(false);
+      setNewCard({ topic_id: '', front: '', back: '' });
+    } catch (err) {
+      console.error("Failed to add flashcard", err);
+      alert(`Erro ao salvar flashcard: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleUpdateCard = async (id: number, front: string, back: string) => {
+    await fetch(`/api/flashcards/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ front, back })
+    });
+    onUpdate();
+  };
+
+  const handleScore = async (difficulty: number) => {
+    if (!studySession) return;
+    const currentCard = studySession.cards[studySession.index];
+    const duration = Math.round((Date.now() - studySession.startTime) / 60000);
+
+    await fetch(`/api/flashcards/${currentCard.id}/score`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ difficulty, duration_minutes: duration })
+    });
+
+    setIsFlipped(false);
+    if (studySession.index + 1 < studySession.cards.length) {
+      setStudySession({ ...studySession, index: studySession.index + 1, startTime: Date.now() });
+    } else {
+      setStudySession(null);
+    }
+    onUpdate();
+  };
+
+  const saveToNotebook = async (content: string, topicId: number) => {
+    await fetch('/api/errors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic_id: topicId, content, tags: 'Flashcard' })
+    });
+    alert('Salvo no Caderno de Erros!');
+  };
+
+  const startStudy = (cards: Flashcard[]) => {
+    if (cards.length === 0) {
+      alert('Nenhum card pendente para este filtro!');
+      return;
+    }
+    setStudySession({ cards, index: 0, startTime: Date.now() });
+    setIsFlipped(false);
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {/* Sidebar */}
+      <div className="lg:col-span-1 space-y-4">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Especialidades</h4>
+            <button onClick={() => setShowAdd(true)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all">
+              <Plus size={16} />
+            </button>
+          </div>
+          
+          <div className="space-y-1">
+            {Object.entries(groupedTopics).map(([spec, specTopics]) => (
+              <div key={spec} className="space-y-1">
+                <div className="flex items-center justify-between group">
+                  <button 
+                    onClick={() => setExpandedSpecialty(expandedSpecialty === spec ? null : spec)}
+                    className="flex-1 flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition-all"
+                  >
+                    <ChevronDown size={14} className={cn("transition-transform", expandedSpecialty === spec && "rotate-180")} />
+                    {spec}
+                  </button>
+                  <button 
+                    onClick={() => startStudy(allFlashcards.filter(c => c.specialty === spec && c.last_difficulty !== null))}
+                    className="opacity-0 group-hover:opacity-100 p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                    title="Revisar Especialidade"
+                  >
+                    <Zap size={14} />
+                  </button>
+                </div>
+                
+                {expandedSpecialty === spec && (
+                  <div className="pl-6 space-y-1">
+                    {specTopics.map(t => (
+                      <button 
+                        key={t.id}
+                        onClick={() => setSelectedTopicId(t.id)}
+                        className={cn(
+                          "w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-all",
+                          selectedTopicId === t.id ? "bg-emerald-50 text-emerald-700 font-bold" : "text-slate-500 hover:bg-slate-50"
+                        )}
+                      >
+                        <span className="truncate">{t.title}</span>
+                        <span className="text-[10px] opacity-50">{t.card_count || 0}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Stats Panel */}
+        <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-xl space-y-4">
+          <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+            <BarChart2 size={14} /> Estatísticas
+          </h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase">Volume Total</p>
+              <p className="text-xl font-bold">{stats?.totals.total_reviews || 0}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 uppercase">Tempo Total</p>
+              <p className="text-xl font-bold">{stats?.totals.total_minutes || 0}m</p>
+            </div>
+          </div>
+          <div className="pt-2 border-t border-white/10">
+            <p className="text-[10px] text-slate-400 uppercase mb-1">Média por Card</p>
+            <p className="text-sm font-medium">
+              {stats?.totals.total_reviews ? (stats.totals.total_minutes / stats.totals.total_reviews).toFixed(1) : 0} min/card
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="lg:col-span-3 space-y-6">
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input 
+                type="text"
+                placeholder="Pesquisar nos seus cards..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-white rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+              />
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <button 
+                onClick={() => startStudy(flashcards.filter(c => c.last_difficulty === 0))}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-rose-50 text-rose-600 rounded-2xl font-bold text-sm hover:bg-rose-100 transition-all"
+              >
+                <Zap size={18} /> Estudar Difíceis
+              </button>
+              {selectedTopicId && (
+                <button 
+                  onClick={() => startStudy(allFlashcards.filter(c => c.topic_id === selectedTopicId))}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-2xl font-bold text-sm hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all"
+                >
+                  <RefreshCw size={18} /> Estudar Tema
+                </button>
+              )}
+            </div>
+          </div>
+          
+          <button 
+            onClick={() => startStudy(allFlashcards.filter(c => !c.next_review || new Date(c.next_review) <= new Date()))}
+            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 text-white rounded-2xl font-bold text-lg hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all group"
+          >
+            <Layers size={24} className="group-hover:scale-110 transition-transform" /> 
+            Estudar Pendentes (Novos + Revisões)
+          </button>
+        </div>
+
+        {/* Card List */}
+        <div className="grid gap-4">
+          {filteredList.map(card => (
+            <div key={card.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Frente</label>
+                  <textarea 
+                    className="w-full bg-transparent border-none outline-none text-sm font-medium resize-none focus:ring-1 focus:ring-blue-500 rounded p-1"
+                    defaultValue={card.front}
+                    onBlur={(e) => handleUpdateCard(card.id, e.target.value, card.back)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Verso</label>
+                  <textarea 
+                    className="w-full bg-transparent border-none outline-none text-sm text-slate-600 resize-none focus:ring-1 focus:ring-emerald-500 rounded p-1"
+                    defaultValue={card.back}
+                    onBlur={(e) => handleUpdateCard(card.id, card.front, e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-50 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{card.topic_title}</span>
+                  {card.next_review && (
+                    <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1">
+                      <Timer size={10} /> {format(new Date(card.next_review), 'dd/MM')}
+                    </span>
+                  )}
+                </div>
+                <button 
+                  onClick={async () => {
+                    if (confirm('Excluir card?')) {
+                      await fetch(`/api/flashcards/${card.id}`, { method: 'DELETE' });
+                      await onUpdate();
+                    }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-rose-500 transition-all"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {filteredList.length === 0 && (
+            <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200">
+              <Layers className="mx-auto text-slate-300 mb-4" size={48} />
+              <p className="text-slate-500">Nenhum card encontrado.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Study Session Modal */}
+      <AnimatePresence>
+        {studySession && (
+          <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center z-[200] p-4 sm:p-8">
+            <div className="w-full max-w-2xl">
+              <div className="flex justify-between items-center mb-8 text-white">
+                <div>
+                  <h3 className="text-xl font-bold">Estudando Flashcards</h3>
+                  <p className="text-sm text-slate-400">{studySession.index + 1} de {studySession.cards.length}</p>
+                </div>
+                <button onClick={() => setStudySession(null)} className="p-2 hover:bg-white/10 rounded-full transition-all">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="relative h-96 perspective-1000 mb-8">
+                <motion.div 
+                  className="w-full h-full relative preserve-3d transition-transform duration-500"
+                  animate={{ rotateY: isFlipped ? 180 : 0 }}
+                  onClick={() => setIsFlipped(!isFlipped)}
+                >
+                  {/* Front */}
+                  <div className="absolute inset-0 backface-hidden bg-white rounded-3xl shadow-2xl flex flex-col items-center justify-center p-12 text-center cursor-pointer">
+                    <span className="absolute top-6 left-6 text-[10px] font-bold text-slate-300 uppercase tracking-widest">Pergunta</span>
+                    <p className="text-2xl font-bold text-slate-800 leading-relaxed">{studySession.cards[studySession.index].front}</p>
+                    <p className="absolute bottom-8 text-xs text-slate-400 font-bold uppercase tracking-widest animate-pulse">Toque para ver a resposta</p>
+                  </div>
+                  {/* Back */}
+                  <div className="absolute inset-0 backface-hidden bg-emerald-600 rounded-3xl shadow-2xl flex flex-col items-center justify-center p-12 text-center rotate-y-180 text-white">
+                    <span className="absolute top-6 left-6 text-[10px] font-bold text-emerald-200 uppercase tracking-widest">Resposta</span>
+                    <p className="text-2xl font-bold leading-relaxed">{studySession.cards[studySession.index].back}</p>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        saveToNotebook(studySession.cards[studySession.index].front, studySession.cards[studySession.index].topic_id);
+                      }}
+                      className="absolute bottom-8 flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold transition-all"
+                    >
+                      <Save size={14} /> Salvar no Caderno
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+
+              {isFlipped && (
+                <motion.div 
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+                >
+                  <button onClick={() => handleScore(0)} className="flex flex-col items-center p-4 bg-rose-500 text-white rounded-2xl font-bold hover:bg-rose-600 transition-all">
+                    <span>Errei</span>
+                    <span className="text-[10px] opacity-60 font-normal">Imediato</span>
+                  </button>
+                  <button onClick={() => handleScore(1)} className="flex flex-col items-center p-4 bg-amber-500 text-white rounded-2xl font-bold hover:bg-amber-600 transition-all">
+                    <span>Difícil</span>
+                    <span className="text-[10px] opacity-60 font-normal">2 dias</span>
+                  </button>
+                  <button onClick={() => handleScore(2)} className="flex flex-col items-center p-4 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 transition-all">
+                    <span>Bom</span>
+                    <span className="text-[10px] opacity-60 font-normal">Progressivo</span>
+                  </button>
+                  <button onClick={() => handleScore(3)} className="flex flex-col items-center p-4 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-600 transition-all">
+                    <span>Fácil</span>
+                    <span className="text-[10px] opacity-60 font-normal">4 dias+</span>
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Modal */}
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl"
+          >
+            <h3 className="text-xl font-bold mb-6">Novo Flashcard</h3>
+            <form onSubmit={handleAdd} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tema</label>
+                <select 
+                  required
+                  value={newCard.topic_id}
+                  onChange={e => setNewCard({...newCard, topic_id: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none"
+                >
+                  <option value="">Selecione um tema</option>
+                  {topics.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Pergunta (Frente)</label>
+                <textarea 
+                  required
+                  value={newCard.front}
+                  onChange={e => setNewCard({...newCard, front: e.target.value})}
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none h-24"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Resposta (Verso)</label>
+                <textarea 
+                  required
+                  value={newCard.back}
+                  onChange={e => setNewCard({...newCard, back: e.target.value})}
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none h-24"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setShowAdd(false)} className="flex-1 py-3 text-slate-600 font-bold disabled:opacity-50" disabled={isAdding}>Cancelar</button>
+                <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2" disabled={isAdding}>
+                  {isAdding ? (
+                    <>
+                      <RefreshCw size={18} className="animate-spin" />
+                      Salvando...
+                    </>
+                  ) : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ErrorsView({ errors, topics, onUpdate }: { errors: ErrorNote[], topics: Topic[], onUpdate: () => void }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [newError, setNewError] = useState({ topic_id: '', content: '', tags: '' });
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await fetch('/api/errors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newError)
+    });
+    setShowAdd(false);
+    setNewError({ topic_id: '', content: '', tags: '' });
+    await onUpdate();
+  };
+
+  const convertToFlashcard = async (error: ErrorNote) => {
+    try {
+      const res = await fetch('/api/flashcards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic_id: error.topic_id,
+          front: `Revisão de Erro: ${error.topic_title}`,
+          back: error.content
+        })
+      });
+      if (res.ok) {
+        alert('Transformado em Flashcard com sucesso!');
+        await onUpdate();
+      }
+    } catch (err) {
+      console.error("Conversion failed", err);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Excluir esta nota permanentemente?')) return;
+    try {
+      const res = await fetch(`/api/errors/${id}`, { method: 'DELETE' });
+      if (res.ok) await onUpdate();
+    } catch (err) {
+      console.error("Delete failed", err);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <h3 className="text-xl font-bold">Caderno de Erros</h3>
+        <button 
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-all"
+        >
+          <Plus size={18} /> Registrar Erro
+        </button>
+      </div>
+
+      <div className="grid gap-4">
+        {errors.map(error => (
+          <div key={error.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative group">
+            <button 
+              onClick={() => handleDelete(error.id)}
+              className="absolute top-4 right-4 p-2 text-slate-300 hover:text-rose-500 transition-all"
+              title="Excluir Erro"
+            >
+              <Trash2 size={16} />
+            </button>
+            <div className="flex justify-between items-start mb-4 pr-8">
+              <div>
+                <span className="text-xs font-bold text-rose-600 uppercase tracking-widest">{error.topic_title}</span>
+                <p className="text-slate-500 text-xs">{format(new Date(error.created_at), 'dd/MM/yyyy HH:mm')}</p>
+              </div>
+              <button 
+                onClick={() => convertToFlashcard(error)}
+                className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 transition-all"
+              >
+                <BrainCircuit size={14} /> Transformar em Flashcard
+              </button>
+            </div>
+            <p className="text-slate-700 leading-relaxed">{error.content}</p>
+            {error.tags && (
+              <div className="mt-4 flex gap-2">
+                {error.tags.split(',').map(tag => (
+                  <span key={tag} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold uppercase">{tag.trim()}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl"
+          >
+            <h3 className="text-xl font-bold mb-6">Registrar Erro Crítico</h3>
+            <form onSubmit={handleAdd} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tema</label>
+                <select 
+                  required
+                  value={newError.topic_id}
+                  onChange={e => setNewError({...newError, topic_id: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none"
+                >
+                  <option value="">Selecione um tema</option>
+                  {topics.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">O que você errou?</label>
+                <textarea 
+                  required
+                  value={newError.content}
+                  onChange={e => setNewError({...newError, content: e.target.value})}
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none h-32"
+                  placeholder="Descreva o conceito que causou a dúvida..."
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tags (separadas por vírgula)</label>
+                <input 
+                  value={newError.tags}
+                  onChange={e => setNewError({...newError, tags: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none"
+                  placeholder="Ex: Fisiologia, Tratamento, Grave"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setShowAdd(false)} className="flex-1 py-3 text-slate-600 font-bold">Cancelar</button>
+                <button type="submit" className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold">Salvar</button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WeeklyView({ topics }: { topics: Topic[] }) {
+  const start = startOfWeek(new Date());
+  const end = endOfWeek(new Date());
+  const days = eachDayOfInterval({ start, end });
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+        {days.map(day => {
+          const dayTopics = topics.filter(t => t.next_review_date && format(new Date(t.next_review_date), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
+          const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+
+          return (
+            <div key={day.toString()} className={cn(
+              "bg-white rounded-2xl border p-4 min-h-[200px] flex flex-col",
+              isToday ? "border-emerald-500 ring-1 ring-emerald-500" : "border-slate-200"
+            )}>
+              <div className="mb-4">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">{format(day, 'EEEE')}</p>
+                <p className={cn("text-lg font-bold", isToday ? "text-emerald-600" : "text-slate-800")}>{format(day, 'dd')}</p>
+              </div>
+              
+              <div className="flex-1 space-y-2">
+                {dayTopics.map(topic => (
+                  <div key={topic.id} className="text-[10px] p-2 bg-slate-50 rounded-lg border border-slate-100 font-medium text-slate-600">
+                    {topic.title}
+                  </div>
+                ))}
+                {dayTopics.length === 0 && <div className="h-full flex items-center justify-center"><p className="text-[10px] text-slate-300 italic">Vazio</p></div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
