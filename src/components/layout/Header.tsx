@@ -17,23 +17,33 @@ const TAB_LABELS: Record<TabId, string> = {
     weekly: 'Semana',
 };
 
+import { RefreshCw, LogOut, Menu } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
+
 interface HeaderProps {
     activeTab: TabId;
     loading: boolean;
     onRefresh: () => void;
+    onMenuClick: () => void;
 }
 
-import { RefreshCw, LogOut } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
-
-export function Header({ activeTab, loading, onRefresh }: HeaderProps) {
+export function Header({ activeTab, loading, onRefresh, onMenuClick }: HeaderProps) {
     const { signOut } = useAuth();
 
     return (
-        <header className="mb-8 flex justify-between items-center">
-            <div>
-                <h2 className="text-2xl font-bold text-slate-800">{TAB_LABELS[activeTab]}</h2>
-                <p className="text-slate-500 text-sm">Organize seus estudos médicos com eficiência.</p>
+        <header className="mb-8 flex justify-between items-center bg-white/50 lg:bg-transparent p-4 -m-4 lg:p-0 lg:m-0 sticky top-0 z-30 lg:relative lg:z-auto backdrop-blur-md lg:backdrop-blur-none border-b border-slate-200 lg:border-none">
+            <div className="flex items-center gap-3">
+                <button
+                    onClick={onMenuClick}
+                    className="p-2 lg:hidden hover:bg-slate-100 rounded-lg transition-colors text-slate-600"
+                    title="Menu"
+                >
+                    <Menu size={24} />
+                </button>
+                <div>
+                    <h2 className="text-xl lg:text-2xl font-bold text-slate-800">{TAB_LABELS[activeTab]}</h2>
+                    <p className="text-slate-500 text-xs lg:text-sm hidden sm:block">Organize seus estudos médicos com eficiência.</p>
+                </div>
             </div>
             <div className="flex items-center gap-2">
                 <button

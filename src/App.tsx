@@ -18,6 +18,7 @@ import { Loader2 } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, loading: authLoading } = useAuth();
   const {
     topics,
@@ -74,10 +75,31 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          setIsMenuOpen(false);
+        }}
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+      />
 
-      <main className="md:ml-64 p-4 md:p-8">
-        <Header activeTab={activeTab} loading={dataLoading} onRefresh={refresh} />
+      {/* Backdrop for mobile */}
+      {isMenuOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden"
+          onClick={() => setIsMenuOpen(false)}
+        />
+      )}
+
+      <main className="lg:ml-64 p-4 md:p-8">
+        <Header
+          activeTab={activeTab}
+          loading={dataLoading}
+          onRefresh={refresh}
+          onMenuClick={() => setIsMenuOpen(!isMenuOpen)}
+        />
 
         <AnimatePresence mode="wait">
           <motion.div
