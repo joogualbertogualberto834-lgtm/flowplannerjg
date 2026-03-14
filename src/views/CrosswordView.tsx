@@ -10,12 +10,7 @@ import { processQuestions, generateRandomCrossword, parseManualFormat } from '..
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { Modal } from '../components/ui/Modal';
 
-// Mobile Keyboard Layout
-const KEYBOARD_ROWS = [
-  ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
-  ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
-  ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '⌫']
-];
+// Removed KEYBOARD_ROWS
 
 export function CrosswordView() {
   const [inputText, setInputText] = useState('');
@@ -31,6 +26,7 @@ export function CrosswordView() {
   const [cellStatus, setCellStatus] = useState<Record<string, 'correct' | 'incorrect' | 'neutral'>>({});
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (crossword) {
@@ -139,6 +135,50 @@ export function CrosswordView() {
     }
   };
 
+  const handleWordInput = (value: string) => {
+    if (!selectedCell || !crossword) return;
+    const { r, c } = selectedCell;
+    const val = value.toUpperCase();
+
+    // Find absolute start of word
+    let startR = r, startC = c;
+    if (direction === 'across') {
+      while (startC > 0 && !crossword.grid[startR][startC - 1].isBlack) startC--;
+    } else {
+      while (startR > 0 && !crossword.grid[startR - 1][startC].isBlack) startR--;
+    }
+
+    const newGrid = userGrid.map(row => [...row]);
+    let currR = startR, currC = startC;
+    let charIndex = 0;
+
+    while (currR < crossword.size && currC < crossword.size && !crossword.grid[currR][currC].isBlack) {
+      if (charIndex < val.length) {
+        newGrid[currR][currC] = val[charIndex];
+      } else {
+        newGrid[currR][currC] = '';
+      }
+      if (direction === 'across') currC++; else currR++;
+      charIndex++;
+    }
+
+    setUserGrid(newGrid);
+    checkWordCorrectness(startR, startC, 'across', newGrid);
+    checkWordCorrectness(startR, startC, 'down', newGrid);
+
+    // Advance selected cell to next logical empty spot or end of word if possible
+    let nextR = startR, nextC = startC;
+    let advCount = val.length;
+    while (advCount > 0 && nextR < crossword.size && nextC < crossword.size && !crossword.grid[nextR][nextC].isBlack) {
+      if (direction === 'across') nextC++; else nextR++;
+      advCount--;
+    }
+
+    if (nextR < crossword.size && nextC < crossword.size && !crossword.grid[nextR][nextC].isBlack) {
+      setSelectedCell({ r: nextR, c: nextC });
+    }
+  };
+
   const handleActionInput = (action: string) => {
     if (!selectedCell || !crossword) return;
     const { r, c } = selectedCell;
@@ -232,6 +272,26 @@ export function CrosswordView() {
   };
 
   const activeClue = getActiveClue();
+
+  // Calculate current word text for input
+  const getCurrentWordValue = () => {
+    if (!selectedCell || !crossword) return '';
+    const { r, c } = selectedCell;
+    let startR = r, startC = c;
+    if (direction === 'across') {
+      while (startC > 0 && !crossword.grid[r][startC - 1].isBlack) startC--;
+    } else {
+      while (startR > 0 && !crossword.grid[startR - 1][c].isBlack) startR--;
+    }
+
+    let str = '';
+    let currR = startR, currC = startC;
+    while (currR < crossword.size && currC < crossword.size && !crossword.grid[currR][currC].isBlack) {
+      str += userGrid[currR][currC] || '';
+      if (direction === 'across') currC++; else currR++;
+    }
+    return str;
+  };
 
   return (
     <div className="space-y-6">
@@ -383,7 +443,13 @@ export function CrosswordView() {
                       return (
                         <motion.div
                           key={`${r}-${c}`}
-                          onClick={() => handleCellClick(r, c)}
+                          onClick={() => {
+                            handleCellClick(r, c);
+                            // Auto focus input on mobile (delay slightly to allow state to settle)
+                            setTimeout(() => {
+                              inputRef.current?.focus();
+                            }, 50);
+                          }}
                           animate={{
                             scale: status === 'correct' ? [1, 1.1, 1] : 1,
                             x: status === 'incorrect' ? [0, -3, 3, -3, 3, 0] : 0
@@ -466,46 +532,40 @@ export function CrosswordView() {
 
       {/* Mobile Sticky Clue */}
       {crossword && activeClue && (
-        <div className="md:hidden fixed bottom-16 left-0 right-0 p-4 z-40 pointer-events-none">
-          <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl pointer-events-auto border border-slate-700 flex items-center gap-4">
-            <div className="bg-emerald-600 text-white w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold text-lg">
-              {activeClue.number}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{activeClue.clue}</p>
-              <div className="text-[10px] text-amber-400 font-bold mt-1 uppercase">
-                {activeClue.hint && (<span><Sparkles className="inline w-3 h-3 mr-1" />{activeClue.hint}</span>)}
+        <div className="md:hidden fixed bottom-6 left-0 right-0 p-4 z-40 pointer-events-none">
+          <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl pointer-events-auto border border-slate-700 flex flex-col gap-3">
+            <div className="flex items-center gap-4">
+              <div className="bg-emerald-600 text-white w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold text-lg">
+                {activeClue.number}
               </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium leading-tight">{activeClue.clue}</p>
+                {activeClue.hint && (
+                  <div className="text-[10px] text-amber-400 font-bold mt-1 uppercase">
+                    <span><Sparkles className="inline w-3 h-3 mr-1" />{activeClue.hint}</span>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setDirection(prev => prev === 'across' ? 'down' : 'across')}
+                className="p-2 bg-slate-800 rounded-lg shrink-0"
+              >
+                <RefreshCw className="w-4 h-4 text-slate-300" />
+              </button>
             </div>
-            <button
-              onClick={() => setDirection(prev => prev === 'across' ? 'down' : 'across')}
-              className="p-2 bg-slate-800 rounded-lg shrink-0"
-            >
-              <RefreshCw className="w-4 h-4 text-slate-300" />
-            </button>
-          </div>
 
-          {/* Custom On-Screen Keyboard */}
-          <div className="bg-slate-200/90 backdrop-blur-md p-2 rounded-2xl mt-2 pb-6 border border-slate-300/50 shadow-inner flex flex-col gap-1.5 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] pointer-events-auto">
-            {KEYBOARD_ROWS.map((row, rowIndex) => (
-              <div key={rowIndex} className="flex justify-center gap-1.5">
-                {row.map((key) => {
-                  const isBackspace = key === '⌫';
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => isBackspace ? handleActionInput('Backspace') : handleCharInput(key)}
-                      className={`
-                        active:scale-95 active:bg-slate-300 transition-transform h-12 flex items-center justify-center rounded-xl text-slate-800 font-bold text-lg shadow-sm
-                        ${isBackspace ? 'bg-slate-300 px-4' : 'bg-white flex-1 max-w-[40px] px-1'}
-                      `}
-                    >
-                      {key}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+            <input
+              ref={inputRef}
+              type="text"
+              value={getCurrentWordValue()}
+              onChange={(e) => handleWordInput(e.target.value)}
+              placeholder="Digite a resposta..."
+              autoCapitalize="characters"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck="false"
+              className="w-full bg-slate-800 text-white px-4 py-3 rounded-xl border border-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none uppercase font-bold tracking-widest text-center"
+            />
           </div>
         </div>
       )}

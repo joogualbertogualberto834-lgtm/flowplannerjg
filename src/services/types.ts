@@ -8,7 +8,7 @@ export interface Topic {
   specialty: string;
   title: string;
   current_interval: number;
-  last_score: number;
+  last_score: number | null;
   next_review_date: string | null;
   urgency_count: number;
   previous_state: string | null;
