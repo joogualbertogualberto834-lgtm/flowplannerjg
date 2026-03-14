@@ -9,9 +9,10 @@ import { FlashcardsView } from './views/FlashcardsView';
 import { ErrorsView } from './views/ErrorsView';
 import { WeeklyView } from './views/WeeklyView';
 import { CrosswordView } from './views/CrosswordView';
+import { PerformanceView } from './views/PerformanceView';
 import { useData } from './hooks/useData';
 
-type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword';
+type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword' | 'performance';
 
 import { useAuth } from './hooks/useAuth';
 import { AuthView } from './views/AuthView';
@@ -71,6 +72,8 @@ export default function App() {
         return <WeeklyView topics={topics} />;
       case 'crossword':
         return <CrosswordView />;
+      case 'performance':
+        return <PerformanceView topics={topics} />;
       default:
         return null;
     }

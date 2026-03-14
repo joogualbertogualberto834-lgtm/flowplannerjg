@@ -47,3 +47,52 @@ export interface ErrorNote {
   tags: string;
   created_at: string;
 }
+
+// ============================================================
+// Tipos da aba Desempenho (adicionados em março/2026)
+// ============================================================
+
+export interface Exam {
+  id: number;
+  name: string;
+  date: string;
+  type: 'simulado' | 'prova_integra';
+  notes: string | null;
+  created_at: string;
+}
+
+export type ErrorOrigin = 'desatencao' | 'falta_contato' | 'cansaco';
+
+export interface ExamError {
+  id: number;
+  exam_id: number | null;
+  exam_name?: string;
+  specialty: string;
+  topic_id: number | null;
+  subtopic: string;
+  error_origin: ErrorOrigin;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface DifficultSubtopic {
+  id: number;
+  specialty: string;
+  topic: string;
+  subtopic: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export type GoalCategory = 'estudo' | 'saude' | 'exercicio';
+
+export interface PersonalGoal {
+  id: number;
+  category: GoalCategory;
+  title: string;
+  unit: string;
+  target_value: number;
+  current_value: number;
+  created_at: string;
+}
+

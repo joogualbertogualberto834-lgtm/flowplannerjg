@@ -353,3 +353,118 @@ export const convertErrorToFlashcard = async (error: ErrorNote) => {
         back: error.content,
     });
 };
+
+// ============================================================
+// Desempenho — Provas & Simulados
+// ============================================================
+
+export const fetchExams = async () => {
+    const { data, error } = await supabase
+        .from('exams')
+        .select('*')
+        .order('date', { ascending: true });
+    if (error) throw error;
+    return (data || []) as any[];
+};
+
+export const addExam = async (payload: { name: string; date: string; type: string; notes?: string }) => {
+    const { error } = await supabase.from('exams').insert(payload);
+    if (error) throw error;
+};
+
+export const updateExam = async (id: number, payload: { name: string; date: string; type: string; notes?: string }) => {
+    const { error } = await supabase.from('exams').update(payload).eq('id', id);
+    if (error) throw error;
+};
+
+export const deleteExam = async (id: number) => {
+    const { error } = await supabase.from('exams').delete().eq('id', id);
+    if (error) throw error;
+};
+
+// ============================================================
+// Desempenho — Caderno de Oportunidades
+// ============================================================
+
+export const fetchExamErrors = async () => {
+    const { data, error } = await supabase
+        .from('exam_errors')
+        .select('*, exams(name)')
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((e: any) => ({ ...e, exam_name: e.exams?.name ?? null })) as any[];
+};
+
+export const addExamError = async (payload: {
+    exam_id?: number | null;
+    specialty: string;
+    topic_id?: number | null;
+    subtopic: string;
+    error_origin: string;
+    notes?: string;
+}) => {
+    const { error } = await supabase.from('exam_errors').insert(payload);
+    if (error) throw error;
+};
+
+export const deleteExamError = async (id: number) => {
+    const { error } = await supabase.from('exam_errors').delete().eq('id', id);
+    if (error) throw error;
+};
+
+// ============================================================
+// Desempenho — Subtemas Difíceis
+// ============================================================
+
+export const fetchDifficultSubtopics = async () => {
+    const { data, error } = await supabase
+        .from('difficult_subtopics')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []) as any[];
+};
+
+export const addDifficultSubtopic = async (payload: { specialty: string; topic: string; subtopic: string; notes?: string }) => {
+    const { error } = await supabase.from('difficult_subtopics').insert(payload);
+    if (error) throw error;
+};
+
+export const deleteDifficultSubtopic = async (id: number) => {
+    const { error } = await supabase.from('difficult_subtopics').delete().eq('id', id);
+    if (error) throw error;
+};
+
+// ============================================================
+// Desempenho — Metas Pessoais
+// ============================================================
+
+export const fetchPersonalGoals = async () => {
+    const { data, error } = await supabase
+        .from('personal_goals')
+        .select('*')
+        .order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data || []) as any[];
+};
+
+export const addPersonalGoal = async (payload: {
+    category: string;
+    title: string;
+    unit: string;
+    target_value: number;
+}) => {
+    const { error } = await supabase.from('personal_goals').insert({ ...payload, current_value: 0 });
+    if (error) throw error;
+};
+
+export const updateGoalProgress = async (id: number, current_value: number) => {
+    const { error } = await supabase.from('personal_goals').update({ current_value }).eq('id', id);
+    if (error) throw error;
+};
+
+export const deletePersonalGoal = async (id: number) => {
+    const { error } = await supabase.from('personal_goals').delete().eq('id', id);
+    if (error) throw error;
+};
+
