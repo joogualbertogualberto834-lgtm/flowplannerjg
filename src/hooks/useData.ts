@@ -23,6 +23,8 @@ export interface AppData {
     flashcardStats: FlashcardStats | null;
     errors: ErrorNote[];
     loading: boolean;
+    // Erro de carregamento — exibido na UI sem travar o app
+    fetchError: string | null;
     groupedTopics: Record<string, Topic[]>;
     refresh: () => Promise<void>;
 }
@@ -39,9 +41,12 @@ export function useData(): AppData {
     const [flashcardStats, setFlashcardStats] = useState<FlashcardStats | null>(null);
     const [errors, setErrors] = useState<ErrorNote[]>([]);
     const [loading, setLoading] = useState(true);
+    // Captura erros de rede e de Supabase sem derrubar o app
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     const refresh = async () => {
         setLoading(true);
+        setFetchError(null);
         try {
             const [
                 topicsData,
@@ -65,8 +70,11 @@ export function useData(): AppData {
             if (allFlashcardsData) setAllFlashcards(allFlashcardsData);
             if (statsData) setFlashcardStats(statsData);
             if (errorsData) setErrors(errorsData);
-        } catch (err) {
-            console.error('[useData] Erro ao buscar dados:', err);
+        } catch (err: any) {
+            const msg = err?.message ?? 'Erro desconhecido ao carregar dados.';
+            console.error('[useData] Erro ao buscar dados:', msg);
+            // Exposto para a UI poder exibir ao usuário sem travar o app
+            setFetchError(msg);
         } finally {
             setLoading(false);
         }
@@ -95,6 +103,7 @@ export function useData(): AppData {
         flashcardStats,
         errors,
         loading,
+        fetchError,
         groupedTopics,
         refresh,
     };

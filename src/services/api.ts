@@ -28,13 +28,15 @@ export const fetchTopics = async (): Promise<Topic[]> => {
 
     if (error) throw error;
 
+    // NOTA: user_progress é relação 1:1 — Supabase retorna objeto, não array.
+    // Usar indexação ?.[0] causaria que todos os campos ficassem null (bug crítico).
     return (data || []).map(t => ({
         ...t,
-        current_interval: t.user_progress?.[0]?.current_interval ?? 0,
-        last_score: t.user_progress?.[0]?.last_score ?? 0,
-        next_review_date: t.user_progress?.[0]?.next_review_date ?? null,
-        urgency_count: t.user_progress?.[0]?.urgency_count ?? 0,
-        previous_state: t.user_progress?.[0]?.previous_state ?? null,
+        current_interval: (t.user_progress as any)?.current_interval ?? 0,
+        last_score: (t.user_progress as any)?.last_score ?? null,
+        next_review_date: (t.user_progress as any)?.next_review_date ?? null,
+        urgency_count: (t.user_progress as any)?.urgency_count ?? 0,
+        previous_state: (t.user_progress as any)?.previous_state ?? null,
         study_count: t.study_count?.[0]?.count ?? 0,
         card_count: t.card_count?.[0]?.count ?? 0
     })) as any;
@@ -138,95 +140,133 @@ export const fetchErrors = async (): Promise<ErrorNote[]> => {
 // --- Sessões de estudo ---
 
 export const postStudySession = async (topicId: number, score: number, durationMinutes: number, activityType: string = 'Study') => {
-    const { data: progress } = await supabase
-        .from('user_progress')
-        .select('*')
-        .eq('topic_id', topicId)
-        .single();
+    try {
+        const { data: progress, error: progressError } = await supabase
+            .from('user_progress')
+            .select('*')
+            .eq('topic_id', topicId)
+            .maybeSingle();
 
-    let currentInterval = progress?.current_interval ?? 0;
-    let currentUrgency = progress?.urgency_count ?? 0;
-    const previousState = progress ? JSON.stringify(progress) : null;
+        if (progressError) throw new Error(`Erro ao buscar progresso: ${progressError.message}`);
 
-    let nextInterval;
-    let newUrgencyCount = currentUrgency;
-    let nextReviewDateStr: string | null = null;
-    let finalScore: number | null = score;
+        let currentInterval = progress?.current_interval ?? 0;
+        let currentUrgency = progress?.urgency_count ?? 0;
+        // Guarda estado anterior para permitir desfazer a operação
+        const previousState = progress ? JSON.stringify(progress) : null;
 
-    if (score === 0 && durationMinutes === 0) {
-        nextInterval = 0;
-        newUrgencyCount = 0;
-        nextReviewDateStr = null;
-        finalScore = null;
-        await supabase.from('study_log').delete().eq('topic_id', topicId).eq('date', new Date().toISOString().split('T')[0]);
-    } else {
-        if (score > 79) {
-            const intervals = [15, 30, 60, 90, 120, 180];
-            nextInterval = intervals.find(i => i > currentInterval) || 180;
+        let nextInterval: number;
+        let newUrgencyCount = currentUrgency;
+        let nextReviewDateStr: string | null = null;
+        let finalScore: number | null = score;
+
+        if (score === 0 && durationMinutes === 0) {
+            // Registro de 'limpeza' — remove a sessão do dia
+            nextInterval = 0;
             newUrgencyCount = 0;
-        } else if (score < 65) {
-            const urgencyIntervals = [1, 3, 7];
-            nextInterval = urgencyIntervals[newUrgencyCount] || 1;
-            newUrgencyCount++;
+            nextReviewDateStr = null;
+            finalScore = null;
+            await supabase.from('study_log').delete().eq('topic_id', topicId).eq('date', new Date().toISOString().split('T')[0]);
         } else {
-            nextInterval = Math.max(7, currentInterval || 7);
+            // Algoritmo de repetição espaçada baseado em % de acertos:
+            // > 79%  → próximo intervalo maior (alta performance)
+            // < 65%  → urgência: revisão muito em breve (1, 3 ou 7 dias)
+            // 65–79% → mantém ou inicia intervalo de 7 dias (performance média)
+            if (score > 79) {
+                const intervals = [15, 30, 60, 90, 120, 180];
+                nextInterval = intervals.find(i => i > currentInterval) || 180;
+                newUrgencyCount = 0;
+            } else if (score < 65) {
+                const urgencyIntervals = [1, 3, 7];
+                nextInterval = urgencyIntervals[Math.min(newUrgencyCount, urgencyIntervals.length - 1)] ?? 1;
+                newUrgencyCount = Math.min(newUrgencyCount + 1, 3);
+            } else {
+                nextInterval = Math.max(7, currentInterval || 7);
+                newUrgencyCount = 0;
+            }
+            const nextReview = new Date();
+            nextReview.setDate(nextReview.getDate() + nextInterval);
+            nextReviewDateStr = nextReview.toISOString();
         }
-        const nextReview = new Date();
-        nextReview.setDate(nextReview.getDate() + nextInterval);
-        nextReviewDateStr = nextReview.toISOString();
-    }
 
-    await supabase.from('user_progress').upsert({
-        topic_id: topicId,
-        current_interval: nextInterval,
-        last_score: finalScore,
-        next_review_date: nextReviewDateStr,
-        urgency_count: newUrgencyCount,
-        previous_state: previousState as any
-    }, { onConflict: 'topic_id' });
+        const { error: upsertError } = await supabase.from('user_progress').upsert({
+            topic_id: topicId,
+            current_interval: nextInterval,
+            last_score: finalScore,
+            next_review_date: nextReviewDateStr,
+            urgency_count: newUrgencyCount,
+            previous_state: previousState as any
+        }, { onConflict: 'topic_id' });
 
-    if (score !== 0 || durationMinutes !== 0) {
-        await supabase.from('study_log').insert({
-            activity_type: activityType,
-            duration_minutes: durationMinutes,
-            score: score,
-            topic_id: topicId
-        });
+        if (upsertError) throw new Error(`Erro ao salvar progresso: ${upsertError.message}`);
+
+        if (score !== 0 || durationMinutes !== 0) {
+            const { error: logError } = await supabase.from('study_log').insert({
+                activity_type: activityType,
+                duration_minutes: durationMinutes,
+                score: score,
+                topic_id: topicId
+            });
+            if (logError) console.warn('[postStudySession] Falha ao inserir study_log:', logError.message);
+        }
+    } catch (err) {
+        console.error('[postStudySession] Falha crítica:', err);
+        throw err; // Re-lança para que as views possam exibir o erro ao usuário
     }
 };
 
 export const undoStudySession = async (topicId: number) => {
-    const { data: progress } = await supabase
-        .from('user_progress')
-        .select('previous_state')
-        .eq('topic_id', topicId)
-        .single();
-
-    if (progress && progress.previous_state) {
-        const prev = typeof progress.previous_state === 'string' ? JSON.parse(progress.previous_state) : progress.previous_state;
-        await supabase.from('user_progress').update({
-            current_interval: prev.current_interval,
-            last_score: prev.last_score,
-            next_review_date: prev.next_review_date,
-            urgency_count: prev.urgency_count,
-            previous_state: null
-        }).eq('topic_id', topicId);
-
-        const { data: lastLog } = await supabase
-            .from('study_log')
-            .select('id')
+    try {
+        const { data: progress, error } = await supabase
+            .from('user_progress')
+            .select('previous_state')
             .eq('topic_id', topicId)
-            .order('id', { ascending: false })
-            .limit(1);
+            .maybeSingle();
 
-        if (lastLog?.length) {
-            await supabase.from('study_log').delete().eq('id', lastLog[0].id);
+        if (error) throw new Error(`Erro ao buscar estado anterior: ${error.message}`);
+
+        if (progress && progress.previous_state) {
+            const prev = typeof progress.previous_state === 'string'
+                ? JSON.parse(progress.previous_state)
+                : progress.previous_state;
+
+            const { error: updateError } = await supabase.from('user_progress').update({
+                current_interval: prev.current_interval,
+                last_score: prev.last_score,
+                next_review_date: prev.next_review_date,
+                urgency_count: prev.urgency_count,
+                previous_state: null
+            }).eq('topic_id', topicId);
+
+            if (updateError) throw new Error(`Erro ao restaurar progresso: ${updateError.message}`);
+
+            const { data: lastLog } = await supabase
+                .from('study_log')
+                .select('id')
+                .eq('topic_id', topicId)
+                .order('id', { ascending: false })
+                .limit(1);
+
+            if (lastLog?.length) {
+                await supabase.from('study_log').delete().eq('id', lastLog[0].id);
+            }
         }
+    } catch (err) {
+        console.error('[undoStudySession] Falha:', err);
+        throw err;
     }
 };
 
 export const clearReview = async (topicId: number) => {
-    await supabase.from('user_progress').update({ next_review_date: null }).eq('topic_id', topicId);
+    try {
+        const { error } = await supabase
+            .from('user_progress')
+            .update({ next_review_date: null })
+            .eq('topic_id', topicId);
+        if (error) throw new Error(`Erro ao limpar revisão: ${error.message}`);
+    } catch (err) {
+        console.error('[clearReview] Falha:', err);
+        throw err;
+    }
 };
 
 export const postStudyLog = async (durationMinutes: number) => {

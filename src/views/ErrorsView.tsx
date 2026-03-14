@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, BrainCircuit } from 'lucide-react';
+import { Plus, Trash2, BrainCircuit, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'motion/react';
 import { Modal } from '../components/ui/Modal';
@@ -17,13 +17,25 @@ interface ErrorsViewProps {
 export function ErrorsView({ errors, topics, onUpdate }: ErrorsViewProps) {
     const [showAdd, setShowAdd] = useState(false);
     const [newError, setNewError] = useState({ topic_id: '', content: '', tags: '' });
+    const [addingError, setAddingError] = useState(false);
+    // Msg de erro inline — não fecha o modal se falhar ao salvar
+    const [formError, setFormError] = useState<string | null>(null);
 
     const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
-        await addError(newError);
-        setShowAdd(false);
-        setNewError({ topic_id: '', content: '', tags: '' });
-        await onUpdate();
+        setFormError(null);
+        setAddingError(true);
+        try {
+            await addError(newError);
+            setShowAdd(false);
+            setNewError({ topic_id: '', content: '', tags: '' });
+            await onUpdate();
+        } catch (err: any) {
+            // Não fecha o modal: exibe o erro para o usuário tentar novamente
+            setFormError(err?.message ?? 'Erro ao salvar. Tente novamente.');
+        } finally {
+            setAddingError(false);
+        }
     };
 
     const handleConvert = async (error: ErrorNote) => {
@@ -106,8 +118,14 @@ export function ErrorsView({ errors, topics, onUpdate }: ErrorsViewProps) {
                 ))}
             </div>
 
-            <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Registrar Erro Crítico">
+            <Modal open={showAdd} onClose={() => { setShowAdd(false); setFormError(null); }} title="Registrar Erro Crítico">
                 <form onSubmit={handleAdd} className="space-y-4">
+                    {formError && (
+                        <div className="flex items-center gap-2 text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg border border-rose-100">
+                            <AlertTriangle size={14} />
+                            {formError}
+                        </div>
+                    )}
                     <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
                             Tema

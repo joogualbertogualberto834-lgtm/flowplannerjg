@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, RotateCcw, CalendarX } from 'lucide-react';
+import { Calendar, RotateCcw, CalendarX, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { postStudySession, undoStudySession, clearReview } from '../../services/api';
 import type { Topic } from '../../services/types';
@@ -13,31 +13,56 @@ interface ReviewCardProps {
 export function ReviewCard({ topic, onUpdate }: ReviewCardProps) {
     const [showForm, setShowForm] = useState(false);
     const [score, setScore] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    // Msg de erro inline — não interrompe o app, apenas informa o usuário
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        await postStudySession(topic.id, parseFloat(score), 20, 'Review');
-        setShowForm(false);
-        onUpdate();
+        setErrorMsg(null);
+
+        // Validação de input para garantir integridade do algoritmo de revisão
+        const numScore = parseFloat(score);
+        if (isNaN(numScore) || numScore < 0 || numScore > 100) {
+            setErrorMsg('Insira um valor entre 0 e 100.');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            await postStudySession(topic.id, numScore, 20, 'Review');
+            setShowForm(false);
+            setScore('');
+            onUpdate();
+        } catch (err: any) {
+            // Exibe o erro sem fechar o card — usuário pode tentar novamente
+            setErrorMsg(err?.message ?? 'Erro ao salvar. Tente novamente.');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const handleUndo = async (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!confirm('Desfazer o último registro de estudo?')) return;
-        await undoStudySession(topic.id);
-        onUpdate();
+        try {
+            await undoStudySession(topic.id);
+            onUpdate();
+        } catch (err: any) {
+            alert(`Erro ao desfazer: ${err?.message ?? 'Tente novamente.'}`);
+        }
     };
 
     const handleClearReview = async (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (
-            !confirm(
-                'Remover este card das revisões? (O tema continuará existindo, mas a data de próxima revisão será limpa)',
-            )
-        )
+        if (!confirm('Remover este card das revisões? (O tema continuará existindo, mas a data de próxima revisão será limpa)'))
             return;
-        await clearReview(topic.id);
-        onUpdate();
+        try {
+            await clearReview(topic.id);
+            onUpdate();
+        } catch (err: any) {
+            alert(`Erro ao remover revisão: ${err?.message ?? 'Tente novamente.'}`);
+        }
     };
 
     return (
@@ -100,7 +125,7 @@ export function ReviewCard({ topic, onUpdate }: ReviewCardProps) {
                         <CalendarX size={20} />
                     </button>
                     <button
-                        onClick={() => setShowForm(!showForm)}
+                        onClick={() => { setShowForm(!showForm); setErrorMsg(null); }}
                         className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-medium hover:bg-slate-800 transition-colors"
                     >
                         Revisar
@@ -109,23 +134,35 @@ export function ReviewCard({ topic, onUpdate }: ReviewCardProps) {
             </div>
 
             {showForm && (
-                <form
-                    onSubmit={handleSubmit}
-                    className="mt-4 pt-4 border-t border-slate-100 flex gap-3"
-                >
-                    <input
-                        type="number"
-                        placeholder="% Acertos"
-                        value={score}
-                        onChange={(e) => setScore(e.target.value)}
-                        className="flex-1 px-4 py-2 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <button
-                        type="submit"
-                        className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-bold"
-                    >
-                        Salvar
-                    </button>
+                <form onSubmit={handleSubmit} className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                    {/* Msg de erro não-bloqueante — app não fecha */}
+                    {errorMsg && (
+                        <div className="flex items-center gap-2 text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">
+                            <AlertTriangle size={14} />
+                            {errorMsg}
+                        </div>
+                    )}
+                    <div className="flex gap-3">
+                        <input
+                            type="number"
+                            required
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            placeholder="% Acertos (0–100)"
+                            value={score}
+                            onChange={(e) => { setScore(e.target.value); setErrorMsg(null); }}
+                            disabled={submitting}
+                            className="flex-1 px-4 py-2 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                        />
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors"
+                        >
+                            {submitting ? 'Salvando...' : 'Salvar'}
+                        </button>
+                    </div>
                 </form>
             )}
         </div>

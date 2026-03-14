@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { Calendar, ChevronDown, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -25,16 +25,31 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
     const [score, setScore] = useState('');
     const [duration, setDuration] = useState('30');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    // Erro inline no modal — não fecha o app, informa exatamente o que falhou
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedTopic) return;
+        setSubmitError(null);
+
+        // Validação antes de enviar ao banco
+        const numScore = parseFloat(score);
+        if (isNaN(numScore) || numScore < 0 || numScore > 100) {
+            setSubmitError('O percentual de acertos deve estar entre 0 e 100.');
+            return;
+        }
+
         setIsSubmitting(true);
         try {
-            await postStudySession(selectedTopic.id, parseFloat(score), parseInt(duration));
+            await postStudySession(selectedTopic.id, numScore, parseInt(duration));
             setSelectedTopic(null);
             setScore('');
+            setDuration('30');
             await onUpdate();
+        } catch (err: any) {
+            // Mantém o modal aberto e exibe o erro ao usuário
+            setSubmitError(err?.message ?? 'Erro ao salvar sessão. Tente novamente.');
         } finally {
             setIsSubmitting(false);
         }
@@ -43,8 +58,12 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
     const handleUndo = async (e: React.MouseEvent, topicId: number) => {
         e.stopPropagation();
         if (!confirm('Desfazer o último registro de estudo para este tema?')) return;
-        await undoStudySession(topicId);
-        onUpdate();
+        try {
+            await undoStudySession(topicId);
+            onUpdate();
+        } catch (err: any) {
+            alert(`Erro ao desfazer: ${err?.message ?? 'Tente novamente.'}`);
+        }
     };
 
     return (
@@ -132,13 +151,20 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
             {/* Study Modal */}
             <Modal
                 open={!!selectedTopic}
-                onClose={() => setSelectedTopic(null)}
+                onClose={() => { setSelectedTopic(null); setSubmitError(null); }}
                 title="Registrar Estudo"
             >
                 {selectedTopic && (
                     <>
                         <p className="text-slate-500 text-sm -mt-4 mb-6">{selectedTopic.title}</p>
                         <form onSubmit={handleSubmit} className="space-y-4">
+                            {/* Erro de submissão exibido inline — sem fechar o modal */}
+                            {submitError && (
+                                <div className="flex items-center gap-2 text-xs text-rose-600 bg-rose-50 px-3 py-2 rounded-lg border border-rose-100">
+                                    <AlertTriangle size={14} />
+                                    {submitError}
+                                </div>
+                            )}
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
                                     Percentual de Acertos (%)
@@ -148,8 +174,9 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
                                     required
                                     min="0"
                                     max="100"
+                                    step="0.1"
                                     value={score}
-                                    onChange={(e) => setScore(e.target.value)}
+                                    onChange={(e) => { setScore(e.target.value); setSubmitError(null); }}
                                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
                                     placeholder="Ex: 85"
                                 />
@@ -161,12 +188,13 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
                                 <input
                                     type="number"
                                     required
+                                    min="1"
                                     value={duration}
                                     onChange={(e) => setDuration(e.target.value)}
                                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
                                 />
                             </div>
-                            <ModalActions onCancel={() => setSelectedTopic(null)} loading={isSubmitting} />
+                            <ModalActions onCancel={() => { setSelectedTopic(null); setSubmitError(null); }} loading={isSubmitting} />
                         </form>
                     </>
                 )}
