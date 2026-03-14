@@ -941,17 +941,34 @@ function ExamRow({ exam, onEdit, onDelete, onStartQuiz, onUpload }: {
 }) {
     const typeLabel = exam.type === 'simulado' ? 'Simulado' : 'Prova na Íntegra';
     const typeColor = exam.type === 'simulado' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
-    const isPast = exam.date < new Date().toISOString().split('T')[0];
 
+    // Parse data com segurança
+    let dateObj: Date | null = null;
+    try {
+        if (exam.date) {
+            dateObj = parseISO(exam.date);
+            if (isNaN(dateObj.getTime())) dateObj = null;
+        }
+    } catch {
+        dateObj = null;
+    }
+
+    const isPast = dateObj ? exam.date < new Date().toISOString().split('T')[0] : false;
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     return (
         <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-colors group">
             <div className={`min-w-[48px] h-12 flex flex-col items-center justify-center rounded-xl font-bold text-sm ${isPast ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700'}`}>
-                <span className="text-[10px] uppercase opacity-60 leading-none">
-                    {format(parseISO(exam.date), 'MMM', { locale: ptBR })}
-                </span>
-                <span className="text-base leading-none">{format(parseISO(exam.date), 'dd')}</span>
+                {dateObj ? (
+                    <>
+                        <span className="text-[10px] uppercase opacity-60 leading-none">
+                            {format(dateObj, 'MMM', { locale: ptBR })}
+                        </span>
+                        <span className="text-base leading-none">{format(dateObj, 'dd')}</span>
+                    </>
+                ) : (
+                    <Calendar size={18} className="opacity-40" />
+                )}
             </div>
             <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-slate-800 truncate">{exam.name}</p>
