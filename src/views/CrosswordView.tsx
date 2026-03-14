@@ -1,27 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Brain,
-  Play,
-  RefreshCw,
-  Send,
-  HelpCircle,
-  CheckCircle2,
-  X,
-  ChevronRight,
-  ChevronDown,
-  ChevronLeft,
-  Sparkles,
-  BookOpen,
-  Trophy,
-  Palette,
-  Layout,
-  Smartphone
+  Play, RefreshCw, HelpCircle, CheckCircle2, ChevronRight, ChevronDown, ChevronLeft, Sparkles, BookOpen, Trophy, Gamepad2
 } from 'lucide-react';
-import { CrosswordData, GridCell, Clue, Theme } from '../crosswordTypes';
-import { SPECIALTIES, THEMES } from '../constants';
+import { CrosswordData, GridCell, Clue } from '../crosswordTypes';
+import { SPECIALTIES } from '../constants';
 import { generateCrossword } from '../utils/crosswordGenerator';
 import { processQuestions, generateRandomCrossword, parseManualFormat } from '../services/geminiService';
+import { SectionHeader } from '../components/ui/SectionHeader';
+import { Modal } from '../components/ui/Modal';
 
 export function CrosswordView() {
   const [inputText, setInputText] = useState('');
@@ -35,12 +22,9 @@ export function CrosswordView() {
   const [selectedSpecialty, setSelectedSpecialty] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
   const [cellStatus, setCellStatus] = useState<Record<string, 'correct' | 'incorrect' | 'neutral'>>({});
-  const [selectedTheme, setSelectedTheme] = useState<Theme>(THEMES[0]);
-  const [lastTap, setLastTap] = useState(0);
 
   const gridRef = useRef<HTMLDivElement>(null);
 
-  // Initialize user grid when crossword changes
   useEffect(() => {
     if (crossword) {
       setUserGrid(crossword.grid.map(row => row.map(() => '')));
@@ -52,7 +36,6 @@ export function CrosswordView() {
   const checkWordCorrectness = (r: number, c: number, dir: 'across' | 'down', currentGrid: string[][]) => {
     if (!crossword) return;
 
-    // Find start and end of the word
     let startR = r, startC = c;
     if (dir === 'across') {
       while (startC > 0 && !crossword.grid[r][startC - 1].isBlack) startC--;
@@ -67,12 +50,8 @@ export function CrosswordView() {
       if (dir === 'across') currC++; else currR++;
     }
 
-    // Check if word is full
     const isFull = cells.every(cell => currentGrid[cell.r][cell.c] !== '');
     if (!isFull) {
-      // If not full, we might want to clear previous status for these cells if they were marked
-      // but let's keep it simple: only update status when full or when a letter makes it definitely wrong?
-      // User said "ao digitar a palavra", usually implies when finished.
       const newStatus = { ...cellStatus };
       cells.forEach(cell => {
         const key = `${cell.r}-${cell.c}`;
@@ -82,7 +61,6 @@ export function CrosswordView() {
       return;
     }
 
-    // Check if correct
     const isCorrect = cells.every(cell => currentGrid[cell.r][cell.c] === crossword.grid[cell.r][cell.c].char);
 
     const newStatus = { ...cellStatus };
@@ -98,7 +76,6 @@ export function CrosswordView() {
       setCrossword(null);
       let words: { answer: string; clue: string }[] = [];
       if (mode === 'manual') {
-        // If it contains brackets, use manual parser, otherwise use AI
         if (inputText.includes('[') && inputText.includes(']')) {
           words = parseManualFormat(inputText);
         } else {
@@ -109,8 +86,6 @@ export function CrosswordView() {
       }
 
       let newCrossword = generateCrossword(words, 20);
-
-      // Se falhar com 20, tenta com 25 (mais espaço ajuda a conectar palavras longas)
       if (!newCrossword) {
         newCrossword = generateCrossword(words, 25);
       }
@@ -118,7 +93,7 @@ export function CrosswordView() {
       if (newCrossword) {
         setCrossword(newCrossword);
       } else {
-        alert("Não foi possível gerar um grid com essas palavras. Tente temas com termos mais variados ou adicione mais conteúdo.");
+        alert("Não foi possível gerar um grid com essas palavras. Tente com termos mais curtos.");
       }
     } catch (error) {
       console.error(error);
@@ -129,20 +104,15 @@ export function CrosswordView() {
 
   const handleCellClick = (r: number, c: number) => {
     if (crossword?.grid[r][c].isBlack) return;
-
-    const now = Date.now();
     if (selectedCell?.r === r && selectedCell?.c === c) {
-      // Toggle direction on click of same cell
       setDirection(prev => prev === 'across' ? 'down' : 'across');
     } else {
       setSelectedCell({ r, c });
     }
-    setLastTap(now);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!selectedCell || !crossword) return;
-
     const { r, c } = selectedCell;
 
     if (e.key.length === 1 && e.key.match(/[a-z]/i)) {
@@ -150,11 +120,9 @@ export function CrosswordView() {
       newGrid[r][c] = e.key.toUpperCase();
       setUserGrid(newGrid);
 
-      // Check correctness for both directions because typing a letter affects both
       checkWordCorrectness(r, c, 'across', newGrid);
       checkWordCorrectness(r, c, 'down', newGrid);
 
-      // Move to next cell
       if (direction === 'across') {
         if (c + 1 < crossword.size && !crossword.grid[r][c + 1].isBlack) {
           setSelectedCell({ r, c: c + 1 });
@@ -167,7 +135,6 @@ export function CrosswordView() {
     } else if (e.key === 'Backspace') {
       const newGrid = userGrid.map(row => [...row]);
       if (newGrid[r][c] === '') {
-        // Move back
         let prevR = r, prevC = c;
         if (direction === 'across') {
           if (c > 0 && !crossword.grid[r][c - 1].isBlack) prevC--;
@@ -178,7 +145,6 @@ export function CrosswordView() {
       } else {
         newGrid[r][c] = '';
         setUserGrid(newGrid);
-        // Clear status when deleting
         checkWordCorrectness(r, c, 'across', newGrid);
         checkWordCorrectness(r, c, 'down', newGrid);
       }
@@ -188,7 +154,6 @@ export function CrosswordView() {
       if (e.key === 'ArrowLeft') nc--;
       if (e.key === 'ArrowDown') nr++;
       if (e.key === 'ArrowUp') nr--;
-
       if (nr >= 0 && nr < crossword.size && nc >= 0 && nc < crossword.size && !crossword.grid[nr][nc].isBlack) {
         setSelectedCell({ r: nr, c: nc });
       }
@@ -219,7 +184,6 @@ export function CrosswordView() {
 
     if (direction === 'across') {
       if (r !== sr) return false;
-      // Find start and end of word
       let start = sc;
       while (start > 0 && !crossword.grid[r][start - 1].isBlack) start--;
       let end = sc;
@@ -238,15 +202,12 @@ export function CrosswordView() {
   const getActiveClue = () => {
     if (!selectedCell || !crossword) return null;
     const { r, c } = selectedCell;
-
-    // Find the clue that starts at the beginning of this word
     let startR = r, startC = c;
     if (direction === 'across') {
       while (startC > 0 && !crossword.grid[r][startC - 1].isBlack) startC--;
     } else {
       while (startR > 0 && !crossword.grid[startR - 1][c].isBlack) startR--;
     }
-
     const clues = direction === 'across' ? crossword.clues.across : crossword.clues.down;
     return clues.find(clue => clue.row === startR && clue.col === startC);
   };
@@ -254,83 +215,47 @@ export function CrosswordView() {
   const activeClue = getActiveClue();
 
   return (
-    <div className={`h-full flex flex-col md:flex-row overflow-hidden relative ${selectedTheme.bg} ${selectedTheme.cellText}`}>
-      {selectedTheme.texture && (
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none"
-          style={{ backgroundImage: `url(${selectedTheme.texture})` }}
-        />
-      )}
-      <div className="absolute top-4 right-4 z-50 flex items-center gap-2 md:gap-4 bg-white/80 p-2 rounded shadow backdrop-blur-sm">
-        {/* Theme Selector */}
-        <div className="relative group">
-          <button className="p-2 border border-[#141414] hover:bg-black/5 rounded-sm flex items-center gap-2">
-            <Palette className="w-4 h-4" />
-            <span className="hidden md:inline text-xs font-bold uppercase tracking-widest">Tema</span>
-          </button>
-          <div className="absolute right-0 top-full mt-2 bg-white border border-[#141414] shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all z-50 w-48">
-            {THEMES.map(t => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* Settings Column */}
+        <div className={`space-y-6 ${crossword ? 'lg:col-span-1 hidden lg:block' : 'lg:col-span-3 lg:max-w-xl lg:mx-auto w-full'}`}>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+            <SectionHeader icon={<Gamepad2 className="text-emerald-600" />} title="Gerador de Cruzadas" />
+
+            <div className="flex bg-slate-100 p-1 rounded-xl">
               <button
-                key={t.id}
-                onClick={() => setSelectedTheme(t)}
-                className={`w-full text-left px-4 py-3 text-xs uppercase font-bold tracking-widest hover:bg-black/5 flex items-center justify-between ${selectedTheme.id === t.id ? 'bg-black/10' : ''}`}
+                onClick={() => setMode('manual')}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === 'manual' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                {t.name}
-                {selectedTheme.id === t.id && <CheckCircle2 className="w-3 h-3" />}
+                Colar Resumo
               </button>
-            ))}
-          </div>
-        </div>
+              <button
+                onClick={() => setMode('auto')}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${mode === 'auto' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Por Especialidade
+              </button>
+            </div>
 
-        <div className="h-8 w-px bg-[#141414]/20 mx-2" />
-
-        <button
-          onClick={() => setMode('manual')}
-          className={`px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-xs uppercase font-bold tracking-widest border border-[#141414] transition-all ${mode === 'manual' ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-black/5'}`}
-        >
-          Manual
-        </button>
-        <button
-          onClick={() => setMode('auto')}
-          className={`px-3 py-1.5 md:px-4 md:py-2 text-[10px] md:text-xs uppercase font-bold tracking-widest border border-[#141414] transition-all ${mode === 'auto' ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-black/5'}`}
-        >
-          Automático
-        </button>
-      </div>
-
-      <main className="flex flex-col md:flex-row h-[calc(100vh-72px)] md:h-[calc(100vh-100px)] overflow-hidden relative">
-        {/* Column 1: Input/Settings Sidebar */}
-        <div className={`w-full md:w-80 border-r border-[#141414]/20 p-4 md:p-6 flex flex-col gap-4 md:gap-6 overflow-y-auto bg-white/40 backdrop-blur-sm transition-all ${crossword ? 'hidden md:flex' : 'flex'}`}>
-          {mode === 'manual' ? (
-            <>
-              <div className="space-y-2">
-                <h2 className="text-xl font-serif italic">Conversor de Resumos</h2>
-                <p className="text-sm opacity-70">Cole resumos do NotebookLM, apostilas ou anotações.</p>
-              </div>
+            {mode === 'manual' ? (
               <textarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="Ex: Cole aqui seu resumo sobre Insuficiência Cardíaca..."
-                className="flex-1 bg-transparent border border-[#141414] p-4 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-[#141414] resize-none"
+                placeholder="Ex: Cole aqui suas anotações ou resumos do NotebookLM..."
+                className="w-full h-40 p-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none transition-all"
               />
-            </>
-          ) : (
-            <div className="space-y-6 flex flex-col flex-1 overflow-hidden">
-              <div className="space-y-2">
-                <h2 className="text-xl font-serif italic">Gerador Automático</h2>
-                <p className="text-sm opacity-70">Escolha especialidade e tema.</p>
-              </div>
-
-              <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+            ) : (
+              <div className="space-y-3 h-56 overflow-y-auto pr-2 custom-scrollbar border border-slate-200 rounded-xl bg-slate-50 p-2">
                 {!selectedSpecialty ? (
                   SPECIALTIES.map((s) => (
                     <button
                       key={s.id}
                       onClick={() => setSelectedSpecialty(s.id)}
-                      className="w-full text-left p-4 border border-[#141414] flex justify-between items-center group transition-all hover:bg-black/5"
+                      className="w-full text-left p-3 rounded-lg bg-white border border-slate-200 flex justify-between items-center group transition-all hover:border-emerald-500 hover:shadow-sm"
                     >
-                      <span className="font-serif italic text-lg">{s.name}</span>
-                      <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                      <span className="font-semibold text-slate-700">{s.name}</span>
+                      <ChevronRight className="w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-1" />
                     </button>
                   ))
                 ) : (
@@ -340,256 +265,204 @@ export function CrosswordView() {
                         setSelectedSpecialty(null);
                         setTopic('');
                       }}
-                      className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest mb-4 hover:opacity-70"
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors"
                     >
                       <ChevronLeft className="w-4 h-4" />
                       Voltar
                     </button>
-
-                    <h3 className="text-sm font-bold uppercase tracking-widest opacity-50 mb-2">
-                      Temas em {SPECIALTIES.find(s => s.id === selectedSpecialty)?.name}
-                    </h3>
-
                     {SPECIALTIES.find(s => s.id === selectedSpecialty)?.themes.map((t) => (
                       <button
                         key={t}
                         onClick={() => setTopic(t)}
-                        className={`w-full text-left p-4 border border-[#141414] flex justify-between items-center group transition-all ${topic === t ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-black/5'}`}
+                        className={`w-full text-left p-3 flex justify-between items-center rounded-lg transition-all border ${topic === t ? 'bg-emerald-50 border-emerald-500 text-emerald-700 font-bold' : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-300'}`}
                       >
-                        <span className="font-serif italic">{t}</span>
-                        {topic === t && <CheckCircle2 className="w-4 h-4" />}
+                        <span className="text-sm">{t}</span>
+                        {topic === t && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
                       </button>
                     ))}
                   </>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          <button
-            onClick={handleGenerate}
-            disabled={isLoading || (mode === 'manual' && !inputText.trim()) || (mode === 'auto' && !topic)}
-            className="w-full bg-[#141414] text-[#E4E3E0] py-4 font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:opacity-90 disabled:opacity-30 transition-all shrink-0"
-          >
-            {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-            {isLoading ? 'Processando...' : 'Gerar Cruzada'}
-          </button>
+            <button
+              onClick={handleGenerate}
+              disabled={isLoading || (mode === 'manual' && !inputText.trim()) || (mode === 'auto' && !topic)}
+              className="w-full py-3.5 bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-100 transition-all"
+            >
+              {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 fill-current" />}
+              {isLoading ? 'GERANDO...' : 'INICIAR PALAVRAS CRUZADAS'}
+            </button>
+          </div>
         </div>
 
-        {/* Column 2: Grid Area */}
-        <div className={`flex-1 p-4 md:p-8 flex flex-col items-center overflow-y-auto transition-all ${selectedTheme.bg}`}>
-          {crossword ? (
-            <div className="w-full max-w-4xl flex flex-col gap-4 md:gap-8 items-center pb-24 md:pb-0">
-              {/* Active Clue Bar (Desktop) */}
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`hidden md:flex w-full ${selectedTheme.gridBg} ${selectedTheme.cellBg} p-6 rounded-sm items-center gap-6 shadow-xl min-h-[100px] border ${selectedTheme.border} ${selectedTheme.shadow}`}
-              >
-                <div className={`${selectedTheme.activeCell} text-white w-12 h-12 rounded-full flex items-center justify-center shrink-0 font-bold text-xl shadow-lg`}>
-                  {activeClue ? activeClue.number : '?'}
-                </div>
-                <div className="flex-1">
-                  <p className={`text-lg italic leading-tight ${selectedTheme.font}`}>
-                    {activeClue ? activeClue.clue : 'Toque em uma célula para começar'}
-                  </p>
-                  {activeClue?.hint && (
-                    <div className="mt-2 flex items-center gap-2 text-xs uppercase tracking-widest text-[#F27D26] font-bold">
-                      <Sparkles className="w-4 h-4" />
-                      Dica Médica: {activeClue.hint}
-                    </div>
-                  )}
-                </div>
-                <div className="text-[10px] uppercase tracking-widest opacity-50 font-bold">
-                  {direction === 'across' ? 'Horizontal' : 'Vertical'}
-                </div>
-              </motion.div>
+        {/* Grid and Clues Area */}
+        {crossword && (
+          <div className="lg:col-span-2 space-y-6">
 
-              {/* The Grid */}
-              <div
-                ref={gridRef}
-                onKeyDown={handleKeyDown}
-                tabIndex={0}
-                className={`grid gap-px ${selectedTheme.gridBg} border ${selectedTheme.border} p-px shadow-2xl focus:outline-none touch-none`}
-                style={{
-                  gridTemplateColumns: `repeat(${crossword.size}, minmax(0, 1fr))`,
-                  width: 'min(85vw, 70vh)',
-                  aspectRatio: '1/1'
-                }}
-              >
-                {crossword.grid.map((row, r) =>
-                  row.map((cell, c) => {
-                    const isActive = selectedCell?.r === r && selectedCell?.c === c;
-                    const isInActiveWord = isCellInActiveWord(r, c);
-                    const status = cellStatus[`${r}-${c}`] || 'neutral';
-
-                    let cellColor = cell.isBlack ? selectedTheme.blackCell : selectedTheme.cellBg;
-                    let textColor = selectedTheme.cellText;
-
-                    if (status === 'correct') cellColor = selectedTheme.correctCell;
-                    if (status === 'incorrect') cellColor = selectedTheme.incorrectCell;
-                    if (isActive) cellColor = selectedTheme.activeCell;
-                    else if (isInActiveWord) cellColor = selectedTheme.activeWord;
-
-                    if (status === 'correct' || status === 'incorrect' || isActive) {
-                      textColor = 'text-white';
-                    }
-
-                    return (
-                      <motion.div
-                        key={`${r}-${c}`}
-                        onClick={() => handleCellClick(r, c)}
-                        animate={{
-                          backgroundColor: cellColor.replace('bg-', '').replace('[', '').replace(']', ''),
-                          scale: status === 'correct' ? [1, 1.1, 1] : 1,
-                          x: status === 'incorrect' ? [0, -4, 4, -4, 4, 0] : 0
-                        }}
-                        transition={{
-                          duration: status === 'incorrect' ? 0.4 : 0.2,
-                          times: status === 'incorrect' ? [0, 0.2, 0.4, 0.6, 0.8, 1] : undefined
-                        }}
-                        className={`relative flex items-center justify-center text-sm md:text-xl font-bold transition-all cursor-pointer select-none
-                          ${cell.isBlack ? selectedTheme.blackCell : ''}
-                          ${textColor}
-                          ${selectedTheme.font}
-                          hover:opacity-90
-                        `}
-                      >
-                        {!cell.isBlack && (
-                          <>
-                            {cell.number && (
-                              <span className={`absolute top-0.5 left-0.5 text-[8px] md:text-[10px] leading-none ${(status === 'correct' || status === 'incorrect' || isActive) ? 'text-white/70' : 'opacity-50'}`}>{cell.number}</span>
-                            )}
-                            {userGrid[r] && userGrid[r][c]}
-                          </>
-                        )}
-                      </motion.div>
-                    );
-                  })
+            {/* Clue Header (Desktop) */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="hidden md:flex bg-white p-6 rounded-2xl border border-slate-200 shadow-sm items-center gap-5 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500" />
+              <div className="bg-emerald-100 text-emerald-700 w-12 h-12 rounded-xl flex items-center justify-center shrink-0 font-bold text-xl shadow-sm">
+                {activeClue ? activeClue.number : '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-lg text-slate-800 font-medium">
+                  {activeClue ? activeClue.clue : 'Selecione um bloco no grid'}
+                </p>
+                {activeClue?.hint && (
+                  <div className="mt-1 flex items-center gap-1.5 text-xs text-amber-600 font-semibold truncate uppercase">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    {activeClue.hint}
+                  </div>
                 )}
               </div>
-
-              <div className="flex flex-col md:flex-row gap-2 md:gap-4 w-full md:w-auto px-4">
-                <button
-                  onClick={checkSolution}
-                  className={`w-full md:w-auto px-6 md:px-12 py-3 md:py-4 ${selectedTheme.gridBg} text-white font-bold uppercase tracking-widest flex items-center justify-center gap-3 hover:opacity-90 shadow-lg`}
-                >
-                  <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" />
-                  Verificar
-                </button>
-                <button
-                  onClick={() => setCrossword(null)}
-                  className={`w-full md:w-auto px-6 md:px-12 py-3 md:py-4 border-2 ${selectedTheme.border} font-bold uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-black/5`}
-                >
-                  <RefreshCw className="w-5 h-5 md:w-6 md:h-6" />
-                  Limpar
-                </button>
+              <div className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                {direction === 'across' ? 'Horizontal' : 'Vertical'}
               </div>
-            </div>
-          ) : (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center space-y-6 max-w-md">
-                <div className="w-24 h-24 bg-[#141414] text-[#E4E3E0] rounded-full flex items-center justify-center mx-auto shadow-xl">
-                  <BookOpen className="w-12 h-12" />
+            </motion.div>
+
+            {/* Render Grid & Mobile List */}
+            <div className="flex flex-col xl:flex-row gap-6">
+
+              {/* Grid Container */}
+              <div className="flex-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center overflow-x-auto">
+                <div
+                  ref={gridRef}
+                  onKeyDown={handleKeyDown}
+                  tabIndex={0}
+                  className="grid gap-[1px] bg-slate-300 p-[1px] rounded-sm focus:outline-none touch-none shadow-md shrink-0 mb-6"
+                  style={{
+                    gridTemplateColumns: `repeat(${crossword.size}, minmax(0, 1fr))`,
+                    width: 'min(100%, 500px)',
+                    aspectRatio: '1/1'
+                  }}
+                >
+                  {crossword.grid.map((row, r) =>
+                    row.map((cell, c) => {
+                      const isActive = selectedCell?.r === r && selectedCell?.c === c;
+                      const isInActiveWord = isCellInActiveWord(r, c);
+                      const status = cellStatus[`${r}-${c}`] || 'neutral';
+
+                      let cellColor = cell.isBlack ? 'bg-slate-800' : 'bg-white';
+                      let textColor = 'text-slate-800';
+
+                      if (status === 'correct') cellColor = 'bg-emerald-500';
+                      if (status === 'incorrect') cellColor = 'bg-rose-500';
+                      if (isActive) cellColor = 'bg-blue-600';
+                      else if (isInActiveWord && status === 'neutral') cellColor = 'bg-blue-100';
+
+                      if (status === 'correct' || status === 'incorrect' || isActive) {
+                        textColor = 'text-white';
+                      }
+
+                      return (
+                        <motion.div
+                          key={`${r}-${c}`}
+                          onClick={() => handleCellClick(r, c)}
+                          animate={{
+                            scale: status === 'correct' ? [1, 1.1, 1] : 1,
+                            x: status === 'incorrect' ? [0, -3, 3, -3, 3, 0] : 0
+                          }}
+                          transition={{ duration: status === 'incorrect' ? 0.3 : 0.2 }}
+                          className={`relative flex items-center justify-center text-sm md:text-lg lg:text-xl font-bold transition-colors cursor-pointer select-none ${cellColor} ${textColor}`}
+                        >
+                          {!cell.isBlack && (
+                            <>
+                              {cell.number && (
+                                <span className={`absolute top-0.5 left-1 text-[8px] md:text-[9px] font-semibold leading-none ${(status === 'correct' || status === 'incorrect' || isActive) ? 'text-white/80' : 'text-slate-400'}`}>{cell.number}</span>
+                              )}
+                              {userGrid[r] && userGrid[r][c]}
+                            </>
+                          )}
+                        </motion.div>
+                      );
+                    })
+                  )}
                 </div>
-                <h2 className="text-3xl font-serif italic">Pronto para o desafio?</h2>
-                <p className="opacity-60">Insira questões à esquerda ou escolha um tema para começar a estudar de forma dinâmica.</p>
-                <div className="grid grid-cols-2 gap-4 text-left">
-                  <div className="p-4 border border-[#141414]/20 rounded-lg">
-                    <Sparkles className="w-5 h-5 mb-2 text-[#F27D26]" />
-                    <p className="text-xs font-bold uppercase opacity-40">IA Inteligente</p>
-                    <p className="text-sm">Processa questões complexas automaticamente.</p>
-                  </div>
-                  <div className="p-4 border border-[#141414]/20 rounded-lg">
-                    <Trophy className="w-5 h-5 mb-2 text-[#F27D26]" />
-                    <p className="text-xs font-bold uppercase opacity-40">Gamificação</p>
-                    <p className="text-sm">Fixe o conteúdo enquanto joga.</p>
-                  </div>
+
+                <div className="flex w-full gap-3 mt-auto">
+                  <button
+                    onClick={() => setCrossword(null)}
+                    className="flex-1 py-3 px-4 rounded-xl border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-800 flex items-center justify-center gap-2 transition-all"
+                  >
+                    Novo
+                  </button>
+                  <button
+                    onClick={checkSolution}
+                    className="flex-[2] py-3 px-4 bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all uppercase tracking-wide"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    Validar
+                  </button>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
 
-        {/* Column 3: Clues Sidebar (Questions) */}
-        {crossword && (
-          <div className="hidden lg:flex w-96 border-l border-[#141414]/20 p-6 flex-col gap-8 overflow-y-auto bg-white/40 backdrop-blur-sm">
-            <div className="space-y-6">
-              <h2 className={`text-2xl italic border-b border-[#141414]/20 pb-2 ${selectedTheme.font}`}>Lista de Perguntas</h2>
-
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <h3 className="font-bold uppercase tracking-widest text-[#F27D26] flex items-center gap-2 text-xs">
-                    <ChevronRight className="w-4 h-4" /> Horizontal
-                  </h3>
-                  <div className="space-y-3">
-                    {crossword.clues.across.map(clue => (
-                      <div
-                        key={`across-${clue.number}`}
-                        className={`text-sm p-3 transition-all cursor-pointer border-l-4 ${selectedCell?.r === clue.row && direction === 'across' ? 'border-[#F27D26] bg-[#F27D26]/10' : 'border-transparent hover:bg-black/5'}`}
-                        onClick={() => {
-                          setSelectedCell({ r: clue.row!, c: clue.col! });
-                          setDirection('across');
-                        }}
-                      >
-                        <span className="font-bold mr-2">{clue.number}.</span>
-                        {clue.clue}
-                      </div>
-                    ))}
-                  </div>
+              {/* Sidebar Desktop list clues */}
+              <div className="xl:w-64 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm overflow-y-auto max-h-[600px] custom-scrollbar">
+                <h3 className="text-sm font-bold uppercase text-slate-400 mb-4 sticky top-0 bg-white z-10 py-1">Horizontal</h3>
+                <div className="space-y-2 mb-6">
+                  {crossword.clues.across.map(clue => (
+                    <div
+                      key={`across-${clue.number}`}
+                      onClick={() => {
+                        setSelectedCell({ r: clue.row!, c: clue.col! });
+                        setDirection('across');
+                      }}
+                      className={`text-sm p-3 rounded-xl cursor-pointer transition-all border ${selectedCell?.r === clue.row && direction === 'across' ? 'bg-blue-50 border-blue-200 text-blue-800 font-medium' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      <span className="font-bold mr-2">{clue.number}.</span>
+                      {clue.clue}
+                    </div>
+                  ))}
                 </div>
 
-                <div className="space-y-4">
-                  <h3 className="font-bold uppercase tracking-widest text-[#F27D26] flex items-center gap-2 text-xs">
-                    <ChevronDown className="w-4 h-4" /> Vertical
-                  </h3>
-                  <div className="space-y-3">
-                    {crossword.clues.down.map(clue => (
-                      <div
-                        key={`down-${clue.number}`}
-                        className={`text-sm p-3 transition-all cursor-pointer border-l-4 ${selectedCell?.c === clue.col && direction === 'down' ? 'border-[#F27D26] bg-[#F27D26]/10' : 'border-transparent hover:bg-black/5'}`}
-                        onClick={() => {
-                          setSelectedCell({ r: clue.row!, c: clue.col! });
-                          setDirection('down');
-                        }}
-                      >
-                        <span className="font-bold mr-2">{clue.number}.</span>
-                        {clue.clue}
-                      </div>
-                    ))}
-                  </div>
+                <h3 className="text-sm font-bold uppercase text-slate-400 mb-4 sticky top-0 bg-white z-10 py-1">Vertical</h3>
+                <div className="space-y-2">
+                  {crossword.clues.down.map(clue => (
+                    <div
+                      key={`down-${clue.number}`}
+                      onClick={() => {
+                        setSelectedCell({ r: clue.row!, c: clue.col! });
+                        setDirection('down');
+                      }}
+                      className={`text-sm p-3 rounded-xl cursor-pointer transition-all border ${selectedCell?.c === clue.col && direction === 'down' ? 'bg-blue-50 border-blue-200 text-blue-800 font-medium' : 'border-transparent text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      <span className="font-bold mr-2">{clue.number}.</span>
+                      {clue.clue}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
         )}
-      </main>
 
-      {/* Mobile Sticky Clue Bar */}
+      </div>
+
+      {/* Mobile Sticky Clue */}
       {crossword && activeClue && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#141414] text-white p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.3)] z-40 border-t border-[#F27D26]">
-          <div className="flex items-center gap-4">
-            <div className="bg-[#F27D26] text-white w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold">
+        <div className="md:hidden fixed bottom-16 left-0 right-0 p-4 z-40 pointer-events-none">
+          <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-xl pointer-events-auto border border-slate-700 flex items-center gap-4">
+            <div className="bg-emerald-600 text-white w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold text-lg">
               {activeClue.number}
             </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-serif italic leading-tight truncate">
-                {activeClue.clue}
-              </p>
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#F27D26] font-bold mt-1">
-                <Sparkles className="w-3 h-3" />
-                Dica: {activeClue.hint || '...'}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{activeClue.clue}</p>
+              <div className="text-[10px] text-amber-400 font-bold mt-1 uppercase">
+                {activeClue.hint && (<span><Sparkles className="inline w-3 h-3 mr-1" />{activeClue.hint}</span>)}
               </div>
             </div>
-            <div className="flex flex-col items-end gap-1">
-              <span className="text-[8px] uppercase tracking-widest opacity-50">{direction === 'across' ? 'Horiz' : 'Vert'}</span>
-              <button
-                onClick={() => setDirection(prev => prev === 'across' ? 'down' : 'across')}
-                className="p-1 border border-white/20 rounded"
-              >
-                <RefreshCw className="w-3 h-3" />
-              </button>
-            </div>
+            <button
+              onClick={() => setDirection(prev => prev === 'across' ? 'down' : 'across')}
+              className="p-2 bg-slate-800 rounded-lg"
+            >
+              <RefreshCw className="w-4 h-4 text-slate-300" />
+            </button>
           </div>
         </div>
       )}
@@ -597,35 +470,26 @@ export function CrosswordView() {
       {/* Success Modal */}
       <AnimatePresence>
         {showSuccess && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-[#141414]/90 backdrop-blur-sm z-50 flex items-center justify-center p-6"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              className="bg-[#E4E3E0] p-12 max-w-lg w-full text-center space-y-8 border-4 border-[#F27D26]"
-            >
-              <div className="w-24 h-24 bg-[#F27D26] text-white rounded-full flex items-center justify-center mx-auto">
-                <Trophy className="w-12 h-12" />
+          <Modal open={showSuccess} onClose={() => setShowSuccess(false)} title="Parabéns, Doutor(a)!">
+            <div className="flex flex-col items-center text-center space-y-4 py-6">
+              <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shadow-inner">
+                <Trophy className="w-10 h-10" />
               </div>
-              <div className="space-y-2">
-                <h2 className="text-4xl font-serif italic">Parabéns, Doutor(a)!</h2>
-                <p className="text-lg opacity-70">Você completou o desafio com perfeição. O conteúdo está fixado!</p>
+              <div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">Desafio Concluído</h3>
+                <p className="text-slate-500 text-sm">Você preencheu perfeitamente todas as palavras-chave deste tema.</p>
               </div>
               <button
                 onClick={() => {
                   setShowSuccess(false);
                   setCrossword(null);
                 }}
-                className="w-full bg-[#141414] text-[#E4E3E0] py-4 font-bold uppercase tracking-widest hover:opacity-90"
+                className="w-full py-4 mt-6 bg-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all uppercase"
               >
-                Novo Desafio
+                Voltar ao Menu
               </button>
-            </motion.div>
-          </motion.div>
+            </div>
+          </Modal>
         )}
       </AnimatePresence>
 

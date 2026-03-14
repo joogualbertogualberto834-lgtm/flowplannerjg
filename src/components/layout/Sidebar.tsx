@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { NavItem } from '../shared/NavItem';
 
-type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'quiz' | 'crossword';
+type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword';
 
 interface SidebarProps {
     activeTab: TabId;
@@ -30,7 +30,6 @@ const NAV_ITEMS: { icon: React.ReactNode; label: string; id: TabId }[] = [
     { icon: <FileText size={20} />, label: 'Caderno de Erros', id: 'errors' },
     { icon: <Gamepad2 size={20} />, label: 'Palavras Cruzadas', id: 'crossword' },
     { icon: <Calendar size={20} />, label: 'Semana', id: 'weekly' },
-    { icon: <MessageSquareText size={20} />, label: 'Quizzes de Aula', id: 'quiz' },
 ];
 
 export function Sidebar({ activeTab, onTabChange, isOpen, onClose }: SidebarProps) {
