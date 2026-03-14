@@ -11,9 +11,9 @@ import {
     fetchExamErrors, addExamError, deleteExamError,
     fetchDifficultSubtopics, addDifficultSubtopic, deleteDifficultSubtopic,
     fetchPersonalGoals, addPersonalGoal, updateGoalProgress, deletePersonalGoal,
-    fetchExamQuestions, saveExamQuestions, saveAttempt, updateAttemptErrorOrigin, fetchExamAttempts,
-    extractQuestionsFromPDF
+    fetchExamQuestions, saveExamQuestions, saveAttempt, updateAttemptErrorOrigin, fetchExamAttempts
 } from '../services/api';
+import { extractQuestionsFromPDF } from '../services/geminiService';
 import type { Topic } from '../services/types';
 
 // ─── Frases motivacionais randômicas ───────────────────────────────────────

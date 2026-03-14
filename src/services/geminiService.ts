@@ -1,11 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: (import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.GEMINI_API_KEY || process.env.GEMINI_API_KEY || "" });
 
 export async function processQuestions(text: string): Promise<{ answer: string; clue: string; hint?: string }[]> {
   if (!text.trim()) return [];
 
-  if (!process.env.GEMINI_API_KEY) {
+  if (!(ai as any).apiKey) {
     alert("Usando dados de demonstração porque a chave API do Gemini não está configurada no .env.");
     return [
       { answer: "SOP", clue: "Síndrome com oligo-ovulação e hiperandrogenismo", hint: "Critérios de Rotterdam" },
@@ -81,7 +81,7 @@ export function parseManualFormat(text: string): { answer: string; clue: string;
 }
 
 export async function generateRandomCrossword(topic: string): Promise<{ answer: string; clue: string; hint?: string }[]> {
-  if (!process.env.GEMINI_API_KEY) {
+  if (!(ai as any).apiKey) {
     alert("Usando dados de demonstração porque a chave API do Gemini não está configurada no .env.");
     return [
       { answer: "SOP", clue: "Síndrome com oligo-ovulação e hiperandrogenismo", hint: "Critérios de Rotterdam" },
@@ -128,5 +128,66 @@ export async function generateRandomCrossword(topic: string): Promise<{ answer: 
   } catch (error) {
     console.error("Error generating random crossword:", error);
     return [];
+  }
+}
+
+export async function extractQuestionsFromPDF(pdfBase64: string, specialty: string, subtopic: string): Promise<any[]> {
+  const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Chave do Gemini não encontrada no .env (VITE_GEMINI_API_KEY).");
+  }
+
+  try {
+    const prompt = `
+      Você é um motor de extração de questões médicas.
+      Analise o PDF e extraia as questões de múltipla escolha.
+      Especialidade: ${specialty}
+      Subtema: ${subtopic}
+
+      Retorne APENAS um JSON:
+      {
+        "questions": [
+          {
+            "question_text": "...",
+            "option_a": "...",
+            "option_b": "...",
+            "option_c": "...",
+            "option_d": "...",
+            "option_e": "...",
+            "correct_option": "A",
+            "specialty": "...",
+            "subtopic": "...",
+            "explanation": "..."
+          }
+        ]
+      }
+    `;
+
+    const result = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                data: pdfBase64,
+                mimeType: "application/pdf"
+              }
+            }
+          ]
+        }
+      ],
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const data = JSON.parse(result.text || "{}");
+    return data.questions || [];
+  } catch (error: any) {
+    console.error("Erro na extração via SDK:", error);
+    throw new Error(error.message || "Erro ao processar PDF com a IA.");
   }
 }

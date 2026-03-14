@@ -534,24 +534,5 @@ export const fetchExamAttempts = async (examId: number) => {
     return (data || []) as any[];
 };
 
-// ============================================================
-// Supabase Edge Function — Extração de PDF via Gemini
-// ============================================================
+// (Edge Function call removed in favor of direct client-side extraction in geminiService.ts)
 
-export const extractQuestionsFromPDF = async (pdfBase64: string, specialty: string, subtopic: string) => {
-    const { data, error } = await supabase.functions.invoke('extract-pdf-questions', {
-        body: { pdf_base64: pdfBase64, specialty, subtopic }
-    });
-
-    if (error) {
-        console.error('[extractQuestionsFromPDF] Invocation error:', error);
-        throw new Error(error.message || 'Erro na chamada da função.');
-    }
-
-    if (data && data.error) {
-        console.error('[extractQuestionsFromPDF] Business error:', data.error);
-        throw new Error(data.error);
-    }
-
-    return data.questions;
-};
