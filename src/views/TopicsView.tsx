@@ -55,6 +55,25 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
         }
     };
 
+    // Zera completamente o progresso do tema — volta ao estado "não estudado"
+    const handleReset = async () => {
+        if (!selectedTopic) return;
+        if (!confirm(`Marcar "${selectedTopic.title}" como NÃO estudado? Isso zera o score, intervalo e data de revisão.`)) return;
+        setIsSubmitting(true);
+        try {
+            // score=0, duration=0 é o sinal de 'reset' no postStudySession
+            await postStudySession(selectedTopic.id, 0, 0);
+            setSelectedTopic(null);
+            setScore('');
+            setDuration('30');
+            await onUpdate();
+        } catch (err: any) {
+            setSubmitError(err?.message ?? 'Erro ao zerar tema. Tente novamente.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleUndo = async (e: React.MouseEvent, topicId: number) => {
         e.stopPropagation();
         if (!confirm('Desfazer o último registro de estudo para este tema?')) return;
@@ -194,7 +213,36 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
                                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
                                 />
                             </div>
-                            <ModalActions onCancel={() => { setSelectedTopic(null); setSubmitError(null); }} loading={isSubmitting} />
+                            {/* Rodapé do modal: Cancelar | Não estudado (reset) | Salvar */}
+                            <div className="flex items-center justify-between gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { setSelectedTopic(null); setSubmitError(null); }}
+                                    className="text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <div className="flex gap-3">
+                                    {/* Botão de reset — apenas visível se o tema já foi estudado */}
+                                    {selectedTopic?.last_score !== null && (
+                                        <button
+                                            type="button"
+                                            onClick={handleReset}
+                                            disabled={isSubmitting}
+                                            className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-sm font-bold hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                                        >
+                                            Não estudado
+                                        </button>
+                                    )}
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                                    >
+                                        {isSubmitting ? 'Salvando...' : 'Salvar'}
+                                    </button>
+                                </div>
+                            </div>
                         </form>
                     </>
                 )}
