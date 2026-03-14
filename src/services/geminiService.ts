@@ -132,36 +132,62 @@ export async function generateRandomCrossword(topic: string): Promise<{ answer: 
 }
 
 export async function extractQuestionsFromPDF(pdfBase64: string, specialty: string, subtopic: string): Promise<any[]> {
-  // MOCK PARA TESTE DE CONEXÃO E FLUXO
-  console.log("MOCK: Ignorando PDF e retornando questões de teste...");
+  const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_AI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Chave do Gemini não encontrada no .env (VITE_GEMINI_API_KEY).");
+  }
 
-  // Simulando um pequeno delay de processamento
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  try {
+    const prompt = `
+      Você é um motor de extração de questões médicas.
+      Analise o PDF e extraia as questões de múltipla escolha.
+      Especialidade: ${specialty}
+      Subtema: ${subtopic}
 
-  return [
-    {
-      question_text: "QUESTÃO MOCK 1: Qual a primeira conduta na suspeita de pancreatite aguda?",
-      option_a: "Cirurgia imediata",
-      option_b: "Jejum e hidratação vigorosa",
-      option_c: "Antibiótico de largo espectro",
-      option_d: "Alta hospitalar",
-      option_e: "Dieta hipercalórica",
-      correct_option: "B",
-      specialty: specialty || "Cirurgia",
-      subtopic: subtopic || "Pancreatite",
-      explanation: "O tratamento básico inicial é suporte com hidratação e repouso glandular (jejum)."
-    },
-    {
-      question_text: "QUESTÃO MOCK 2: Qual o sinal clássico de descompressão dolorosa no ponto de McBurney?",
-      option_a: "Sinal de Murphy",
-      option_b: "Sinal de Rovsing",
-      option_c: "Sinal de Blumberg",
-      option_d: "Sinal de Cullen",
-      option_e: "Sinal de Grey-Turner",
-      correct_option: "C",
-      specialty: specialty || "Cirurgia",
-      subtopic: subtopic || "Apendicite",
-      explanation: "Blumberg é o sinal de peritonite localizada, clássico na apendicite."
-    }
-  ];
+      Retorne APENAS um JSON:
+      {
+        "questions": [
+          {
+            "question_text": "...",
+            "option_a": "...",
+            "option_b": "...",
+            "option_c": "...",
+            "option_d": "...",
+            "option_e": "...",
+            "correct_option": "A",
+            "specialty": "...",
+            "subtopic": "...",
+            "explanation": "..."
+          }
+        ]
+      }
+    `;
+
+    const result = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                data: pdfBase64,
+                mimeType: "application/pdf"
+              }
+            }
+          ]
+        }
+      ],
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const data = JSON.parse(result.text || "{}");
+    return data.questions || [];
+  } catch (error: any) {
+    console.error("Erro na extração via SDK:", error);
+    throw new Error(error.message || "Erro ao processar PDF com a IA.");
+  }
 }
