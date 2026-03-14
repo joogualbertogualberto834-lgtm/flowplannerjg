@@ -137,7 +137,7 @@ export const fetchErrors = async (): Promise<ErrorNote[]> => {
 
 // --- Sessões de estudo ---
 
-export const postStudySession = async (topicId: number, score: number, durationMinutes: number) => {
+export const postStudySession = async (topicId: number, score: number, durationMinutes: number, activityType: string = 'Study') => {
     const { data: progress } = await supabase
         .from('user_progress')
         .select('*')
@@ -187,7 +187,7 @@ export const postStudySession = async (topicId: number, score: number, durationM
 
     if (score !== 0 || durationMinutes !== 0) {
         await supabase.from('study_log').insert({
-            activity_type: 'Study',
+            activity_type: activityType,
             duration_minutes: durationMinutes,
             score: score,
             topic_id: topicId

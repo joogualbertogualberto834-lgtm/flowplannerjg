@@ -10,6 +10,13 @@ import { processQuestions, generateRandomCrossword, parseManualFormat } from '..
 import { SectionHeader } from '../components/ui/SectionHeader';
 import { Modal } from '../components/ui/Modal';
 
+// Mobile Keyboard Layout
+const KEYBOARD_ROWS = [
+  ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+  ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+  ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '⌫']
+];
+
 export function CrosswordView() {
   const [inputText, setInputText] = useState('');
   const [crossword, setCrossword] = useState<CrosswordData | null>(null);
@@ -24,7 +31,6 @@ export function CrosswordView() {
   const [cellStatus, setCellStatus] = useState<Record<string, 'correct' | 'incorrect' | 'neutral'>>({});
 
   const gridRef = useRef<HTMLDivElement>(null);
-  const hiddenInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (crossword) {
@@ -110,11 +116,6 @@ export function CrosswordView() {
     } else {
       setSelectedCell({ r, c });
     }
-
-    // Foca o input invisível para abrir o teclado no celular
-    setTimeout(() => {
-      hiddenInputRef.current?.focus();
-    }, 10);
   };
 
   const handleCharInput = (char: string) => {
@@ -348,32 +349,7 @@ export function CrosswordView() {
             <div className="flex flex-col xl:flex-row gap-6">
 
               {/* Grid Container */}
-              <div className="flex-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center overflow-x-auto relative">
-
-                {/* Teclado oculto para dispositivos móveis */}
-                <input
-                  ref={hiddenInputRef}
-                  type="text"
-                  className="absolute opacity-0 w-px h-px overflow-hidden ml-[-9999px] pointer-events-none"
-                  value=""
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val.length > 0) {
-                      const char = val.charAt(val.length - 1);
-                      if (char.match(/[a-z0-9]/i)) {
-                        handleCharInput(char);
-                      }
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Backspace' || e.key.startsWith('Arrow')) {
-                      handleActionInput(e.key);
-                    }
-                  }}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck="false"
-                />
+              <div className="flex-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center overflow-x-auto relative xl:min-w-[550px]">
 
                 <div
                   ref={gridRef}
@@ -503,10 +479,33 @@ export function CrosswordView() {
             </div>
             <button
               onClick={() => setDirection(prev => prev === 'across' ? 'down' : 'across')}
-              className="p-2 bg-slate-800 rounded-lg"
+              className="p-2 bg-slate-800 rounded-lg shrink-0"
             >
               <RefreshCw className="w-4 h-4 text-slate-300" />
             </button>
+          </div>
+
+          {/* Custom On-Screen Keyboard */}
+          <div className="bg-slate-200/90 backdrop-blur-md p-2 rounded-2xl mt-2 pb-6 border border-slate-300/50 shadow-inner flex flex-col gap-1.5 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] pointer-events-auto">
+            {KEYBOARD_ROWS.map((row, rowIndex) => (
+              <div key={rowIndex} className="flex justify-center gap-1.5">
+                {row.map((key) => {
+                  const isBackspace = key === '⌫';
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => isBackspace ? handleActionInput('Backspace') : handleCharInput(key)}
+                      className={`
+                        active:scale-95 active:bg-slate-300 transition-transform h-12 flex items-center justify-center rounded-xl text-slate-800 font-bold text-lg shadow-sm
+                        ${isBackspace ? 'bg-slate-300 px-4' : 'bg-white flex-1 max-w-[40px] px-1'}
+                      `}
+                    >
+                      {key}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </div>
       )}

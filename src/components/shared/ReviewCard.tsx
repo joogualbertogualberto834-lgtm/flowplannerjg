@@ -16,7 +16,7 @@ export function ReviewCard({ topic, onUpdate }: ReviewCardProps) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        await postStudySession(topic.id, parseFloat(score), 20);
+        await postStudySession(topic.id, parseFloat(score), 20, 'Review');
         setShowForm(false);
         onUpdate();
     };
