@@ -545,7 +545,9 @@ export const extractQuestionsFromPDF = async (pdfBase64: string, specialty: stri
 
     if (error) {
         console.error('[extractQuestionsFromPDF] Edge Function error:', error);
-        throw new Error('Falha ao processar o PDF com IA. Verifique sua conexão ou se as Edge Functions estão ativas.');
+        // Tentar extrair a mensagem de erro do corpo da resposta se disponível
+        const errorMsg = error.message || 'Falha ao processar o PDF com IA.';
+        throw new Error(`${errorMsg} Verifique sua conexão ou as configurações das Edge Functions.`);
     }
 
     return data.questions; // Esperamos um { questions: [...] }
