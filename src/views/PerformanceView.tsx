@@ -11,6 +11,8 @@ import {
     fetchExamErrors, addExamError, deleteExamError,
     fetchDifficultSubtopics, addDifficultSubtopic, deleteDifficultSubtopic,
     fetchPersonalGoals, addPersonalGoal, updateGoalProgress, deletePersonalGoal,
+    fetchExamQuestions, saveExamQuestions, saveAttempt, updateAttemptErrorOrigin, fetchExamAttempts,
+    extractQuestionsFromPDF
 } from '../services/api';
 import type { Topic } from '../services/types';
 
@@ -64,12 +66,24 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [showSubtopicModal, setShowSubtopicModal] = useState(false);
     const [showGoalModal, setShowGoalModal] = useState(false);
+    const [showQuizModal, setShowQuizModal] = useState(false);
+    const [isExtracting, setIsExtracting] = useState(false);
+    const [showClassificationModal, setShowClassificationModal] = useState(false);
+    const [showQuizResults, setShowQuizResults] = useState(false);
 
     // ── Formulários ──
     const [examForm, setExamForm] = useState({ name: '', date: '', type: 'simulado', notes: '' });
     const [errorForm, setErrorForm] = useState({ exam_id: '', specialty: '', topic_id: '', subtopic: '', error_origin: 'desatencao', notes: '' });
     const [subtopicForm, setSubtopicForm] = useState({ specialty: '', topic: '', subtopic: '', notes: '' });
     const [goalForm, setGoalForm] = useState({ category: 'estudo', title: '', unit: '', target_value: '100' });
+
+    // ── Quiz State ──
+    const [activeQuiz, setActiveQuiz] = useState<any>(null);
+    const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
+    const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+    const [quizAttempts, setQuizAttempts] = useState<any[]>([]);
+    const [lastAttemptId, setLastAttemptId] = useState<number | null>(null);
+    const [feedback, setFeedback] = useState<{ isCorrect: boolean; correctOption: string } | null>(null);
 
     // ── Filtros ──
     const [errorFilter, setErrorFilter] = useState<string>('all');
@@ -98,7 +112,7 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
     useEffect(() => {
         const interval = setInterval(() => {
             setPhraseIdx(i => (i + 1) % MOTIVATIONAL_PHRASES.length);
-        }, 5000);
+        }, 15 * 60 * 1000); // 15 minutos
         return () => clearInterval(interval);
     }, []);
 
@@ -137,7 +151,128 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
         try { await deleteExam(id); loadAll(); } catch (err: any) { alert(err.message); }
     };
 
-    // ── Handlers de Erros ──
+    // ── Handlers de Quiz & PDF ─────────────────────────────────────────────
+
+    const handleFileUpload = async (examId: number, file: File, specialty: string, subtopic: string) => {
+        setIsExtracting(true);
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                const base64 = (reader.result as string).split(',')[1];
+                const questions = await extractQuestionsFromPDF(base64, specialty, subtopic);
+                await saveExamQuestions(examId, questions);
+                alert(`Sucesso! ${questions.length} questões extraídas.`);
+                loadAll();
+            };
+        } catch (err: any) {
+            alert('Erro na extração: ' + err.message);
+        } finally {
+            setIsExtracting(false);
+        }
+    };
+
+    const handleStartQuiz = async (exam: any) => {
+        try {
+            const questions = await fetchExamQuestions(exam.id);
+            if (questions.length === 0) {
+                alert('Este exame não possui questões extraídas. Faça o upload de um PDF primeiro.');
+                return;
+            }
+            setActiveQuiz(exam);
+            setQuizQuestions(questions);
+            setCurrentQuestionIdx(0);
+            setQuizAttempts([]);
+            setShowQuizModal(true);
+            setShowQuizResults(false);
+        } catch (err: any) {
+            alert('Erro ao carregar questões: ' + err.message);
+        }
+    };
+
+    const handleAnswerQuestion = async (option: string) => {
+        if (!activeQuiz || feedback) return;
+        const question = quizQuestions[currentQuestionIdx];
+        const isCorrect = option === question.correct_option;
+
+        try {
+            const attempt = await saveAttempt({
+                exam_id: activeQuiz.id,
+                question_id: question.id,
+                selected_option: option,
+                is_correct: isCorrect,
+            });
+
+            setFeedback({ isCorrect, correctOption: question.correct_option });
+            setLastAttemptId(attempt.id);
+
+            if (isCorrect) {
+                // Se acertou, avança após breve delay
+                setTimeout(() => {
+                    handleNextQuestion();
+                }, 1500);
+            } else {
+                // Se errou, abre o modal de classificação
+                setShowClassificationModal(true);
+            }
+        } catch (err: any) {
+            alert('Erro ao salvar resposta: ' + err.message);
+        }
+    };
+
+    const handleClassifyError = async (origin: string) => {
+        if (!lastAttemptId || !activeQuiz) return;
+        const question = quizQuestions[currentQuestionIdx];
+
+        try {
+            await updateAttemptErrorOrigin(lastAttemptId, origin);
+
+            // AUTO-ROUTING conforme o plano aprovado:
+            // 📚 Falta de Contato ou 😴 Cansaço -> Caderno de Oportunidades (Seção 2)
+            if (origin === 'falta_contato' || origin === 'cansaco') {
+                await addExamError({
+                    exam_id: activeQuiz.id,
+                    specialty: question.specialty || 'Geral',
+                    topic_id: question.topic_id || null,
+                    subtopic: question.subtopic || question.question_text.slice(0, 50) + '...',
+                    error_origin: origin,
+                    notes: `Erro automático do Quiz: ${activeQuiz.name}`
+                });
+
+                // Se houver 2+ erros de Falta de Contato no mesmo subtema -> Seção 3 (Foco)
+                const sameSubtopicErrors = examErrors.filter(e =>
+                    e.subtopic === (question.subtopic || question.question_text.slice(0, 50) + '...') &&
+                    e.error_origin === 'falta_contato'
+                );
+
+                if (origin === 'falta_contato' && sameSubtopicErrors.length >= 1) { // >=1 porque o atual ainda não está no state 'examErrors' local
+                    await addDifficultSubtopic({
+                        specialty: question.specialty || 'Geral',
+                        topic: question.subtopic || 'Geral',
+                        subtopic: question.subtopic || 'Verificar questão',
+                        notes: 'Subtema recorrente com falta de contato.'
+                    });
+                }
+            }
+
+            setShowClassificationModal(false);
+            handleNextQuestion();
+            loadAll(); // Atualiza as seções 2 e 3
+        } catch (err: any) {
+            alert('Erro ao classificar: ' + err.message);
+        }
+    };
+
+    const handleNextQuestion = () => {
+        setFeedback(null);
+        if (currentQuestionIdx + 1 < quizQuestions.length) {
+            setCurrentQuestionIdx(prev => prev + 1);
+        } else {
+            setShowQuizResults(true);
+        }
+    };
+
+    // ── Handlers de Erros ──────────────────────────────────────────────────
     const handleSaveError = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -242,7 +377,7 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Próximas</p>
                             <div className="space-y-2">
                                 {futureExams.map(exam => (
-                                    <ExamRow key={exam.id} exam={exam} onEdit={openEditExam} onDelete={handleDeleteExam} />
+                                    <ExamRow key={exam.id} exam={exam} onEdit={openEditExam} onDelete={handleDeleteExam} onStartQuiz={handleStartQuiz} onUpload={handleFileUpload} />
                                 ))}
                             </div>
                         </div>
@@ -253,7 +388,7 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Realizadas</p>
                             <div className="space-y-2 opacity-60">
                                 {pastExams.map(exam => (
-                                    <ExamRow key={exam.id} exam={exam} onEdit={openEditExam} onDelete={handleDeleteExam} />
+                                    <ExamRow key={exam.id} exam={exam} onEdit={openEditExam} onDelete={handleDeleteExam} onStartQuiz={handleStartQuiz} onUpload={handleFileUpload} />
                                 ))}
                             </div>
                         </div>
@@ -438,7 +573,146 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
                 </section>
             </div>
 
-            {/* ══════════ MODAIS ══════════════════════════════════════════════ */}
+            {/* ══════════ MODAIS DE QUIZ ══════════════════════════════════════ */}
+
+            {/* Modal: Quiz Principal */}
+            {showQuizModal && activeQuiz && (
+                <ModalOverlay onClose={() => setShowQuizModal(false)} title={`Quiz: ${activeQuiz.name}`}>
+                    {!showQuizResults ? (
+                        <div className="space-y-6">
+                            <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl">
+                                <span className="text-xs font-bold text-slate-500">Questão {currentQuestionIdx + 1} de {quizQuestions.length}</span>
+                                <div className="h-1.5 w-32 bg-slate-200 rounded-full overflow-hidden">
+                                    <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${((currentQuestionIdx + 1) / quizQuestions.length) * 100}%` }} />
+                                </div>
+                            </div>
+
+                            <p className="text-sm font-medium text-slate-800 leading-relaxed italic border-l-4 border-slate-200 pl-4 py-1">
+                                {quizQuestions[currentQuestionIdx].question_text}
+                            </p>
+
+                            <div className="space-y-2">
+                                {['a', 'b', 'c', 'd', 'e'].map(opt => {
+                                    const key = `option_${opt}`;
+                                    const text = quizQuestions[currentQuestionIdx][key];
+                                    if (!text) return null;
+
+                                    let btnClass = "w-full text-left p-4 rounded-xl border text-sm transition-all ";
+                                    if (feedback) {
+                                        if (opt.toUpperCase() === feedback.correctOption) btnClass += "bg-emerald-50 border-emerald-300 text-emerald-800 ring-2 ring-emerald-200";
+                                        else if (opt.toUpperCase() !== feedback.correctOption && feedback.isCorrect === false) btnClass += "bg-slate-50 border-slate-200 opacity-50";
+                                        else btnClass += "bg-white border-slate-100 opacity-50";
+                                    } else {
+                                        btnClass += "bg-white border-slate-200 hover:border-blue-400 hover:bg-blue-50/30";
+                                    }
+
+                                    return (
+                                        <button
+                                            key={opt}
+                                            onClick={() => handleAnswerQuestion(opt.toUpperCase())}
+                                            disabled={!!feedback}
+                                            className={btnClass}
+                                        >
+                                            <div className="flex gap-3">
+                                                <span className="font-bold text-slate-400 uppercase">{opt})</span>
+                                                <span className="text-slate-700">{text}</span>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {feedback && (
+                                <div className={`p-4 rounded-xl text-center font-bold text-sm ${feedback.isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                    {feedback.isCorrect ? '✨ Resposta Correta!' : '❌ Ops, não foi dessa vez.'}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="text-center space-y-6 py-4">
+                            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                                <Trophy size={40} />
+                            </div>
+                            <div>
+                                <h4 className="text-xl font-bold text-slate-800">Quiz Finalizado!</h4>
+                                <p className="text-slate-500 text-sm">Seus erros foram mapeados no Caderno de Oportunidades.</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl">
+                                <div>
+                                    <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Acertos</p>
+                                    <p className="text-2xl font-bold text-emerald-600">
+                                        {quizAttempts.filter(a => a.is_correct).length} / {quizQuestions.length}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Nota</p>
+                                    <p className="text-2xl font-bold text-blue-600">
+                                        {Math.round((quizAttempts.filter(a => a.is_correct).length / quizQuestions.length) * 100)}%
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowQuizModal(false)}
+                                className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all shadow-lg shadow-slate-200"
+                            >
+                                Concluir
+                            </button>
+                        </div>
+                    )}
+                </ModalOverlay>
+            )}
+
+            {/* Modal: Classificação do Erro (Abre automático após errar) */}
+            {showClassificationModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center space-y-6 transform animate-in fade-in zoom-in duration-300">
+                        <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto">
+                            <AlertTriangle size={32} />
+                        </div>
+                        <div>
+                            <h4 className="text-lg font-bold text-slate-800">O que causou este erro?</h4>
+                            <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-bold">Classificação da Mentoria</p>
+                        </div>
+                        <div className="grid gap-3">
+                            <button
+                                onClick={() => handleClassifyError('desatencao')}
+                                className="flex flex-col items-center bg-purple-50 hover:bg-purple-100 border border-purple-200 p-4 rounded-2xl transition-all group"
+                            >
+                                <span className="text-2xl group-hover:scale-110 transition-transform">🧠</span>
+                                <span className="text-sm font-bold text-purple-700 mt-1">Desatenção</span>
+                                <span className="text-[10px] text-purple-400">Eu sabia mas li errado</span>
+                            </button>
+                            <button
+                                onClick={() => handleClassifyError('falta_contato')}
+                                className="flex flex-col items-center bg-amber-50 hover:bg-amber-100 border border-amber-200 p-4 rounded-2xl transition-all group"
+                            >
+                                <span className="text-2xl group-hover:scale-110 transition-transform">📚</span>
+                                <span className="text-sm font-bold text-amber-700 mt-1">Falta de Contato</span>
+                                <span className="text-[10px] text-amber-400">Assunto novo ou desconhecido</span>
+                            </button>
+                            <button
+                                onClick={() => handleClassifyError('cansaco')}
+                                className="flex flex-col items-center bg-blue-50 hover:bg-blue-100 border border-blue-200 p-4 rounded-2xl transition-all group"
+                            >
+                                <span className="text-2xl group-hover:scale-110 transition-transform">😴</span>
+                                <span className="text-sm font-bold text-blue-700 mt-1">Cansaço</span>
+                                <span className="text-[10px] text-blue-400">Exaustão física ou mental</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Spinner Global de Extração de PDF */}
+            {isExtracting && (
+                <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-slate-900/60 backdrop-blur-md">
+                    <div className="w-20 h-20 border-4 border-blue-500 border-t-white rounded-full animate-spin mb-4" />
+                    <p className="text-white font-bold text-lg">IA processando seu PDF...</p>
+                    <p className="text-white/60 text-sm">Fatiando questões e temas...</p>
+                </div>
+            )}
+
+            {/* ══════════ MODAIS LEGADOS ══════════════════════════════════════ */}
 
             {/* Modal: Exame */}
             {showExamModal && (
@@ -635,10 +909,20 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
 
 // ─── Sub-componentes ────────────────────────────────────────────────────────
 
-function ExamRow({ exam, onEdit, onDelete }: { key?: React.Key; exam: any; onEdit: (e: any) => void; onDelete: (id: number) => void | Promise<void> }) {
+function ExamRow({ exam, onEdit, onDelete, onStartQuiz, onUpload }: {
+    key?: React.Key;
+    exam: any;
+    onEdit: (e: any) => void;
+    onDelete: (id: number) => void | Promise<void>;
+    onStartQuiz: (exam: any) => void;
+    onUpload: (examId: number, file: File, specialty: string, subtopic: string) => void;
+}) {
     const typeLabel = exam.type === 'simulado' ? 'Simulado' : 'Prova na Íntegra';
     const typeColor = exam.type === 'simulado' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
     const isPast = exam.date < new Date().toISOString().split('T')[0];
+
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
     return (
         <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 transition-colors group">
             <div className={`min-w-[48px] h-12 flex flex-col items-center justify-center rounded-xl font-bold text-sm ${isPast ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-700'}`}>
@@ -649,8 +933,31 @@ function ExamRow({ exam, onEdit, onDelete }: { key?: React.Key; exam: any; onEdi
             </div>
             <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-slate-800 truncate">{exam.name}</p>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${typeColor}`}>{typeLabel}</span>
-                {exam.notes && <p className="text-xs text-slate-400 truncate mt-0.5">{exam.notes}</p>}
+                <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${typeColor}`}>{typeLabel}</span>
+                    <button
+                        onClick={() => onStartQuiz(exam)}
+                        className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full hover:bg-emerald-200 transition-colors flex items-center gap-1"
+                    >
+                        <Brain size={10} /> Iniciar Quiz
+                    </button>
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full hover:bg-slate-200 transition-colors"
+                    >
+                        📁 Subir PDF
+                    </button>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept=".pdf"
+                        onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) onUpload(exam.id, file, 'Geral', exam.name);
+                        }}
+                    />
+                </div>
             </div>
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onClick={() => onEdit(exam)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700">

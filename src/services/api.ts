@@ -468,3 +468,85 @@ export const deletePersonalGoal = async (id: number) => {
     if (error) throw error;
 };
 
+// ============================================================
+// Desempenho — Motor de Quiz (Questões & Tentativas)
+// ============================================================
+
+export const fetchExamQuestions = async (examId: number) => {
+    const { data, error } = await supabase
+        .from('exam_questions')
+        .select('*')
+        .eq('exam_id', examId)
+        .order('question_number', { ascending: true });
+    if (error) throw error;
+    return (data || []) as any[];
+};
+
+export const saveExamQuestions = async (examId: number, questions: any[]) => {
+    const payload = questions.map((q, idx) => ({
+        exam_id: examId,
+        question_number: idx + 1,
+        question_text: q.question_text,
+        option_a: q.option_a,
+        option_b: q.option_b,
+        option_c: q.option_c,
+        option_d: q.option_d,
+        option_e: q.option_e || null,
+        correct_option: q.correct_option,
+        specialty: q.specialty || null,
+        subtopic: q.subtopic || null,
+        explanation: q.explanation || null
+    }));
+    const { error } = await supabase.from('exam_questions').insert(payload);
+    if (error) throw error;
+};
+
+export const saveAttempt = async (payload: {
+    exam_id: number;
+    question_id: number;
+    selected_option: string;
+    is_correct: boolean;
+    error_origin?: string | null;
+}) => {
+    const { data, error } = await supabase
+        .from('exam_attempts')
+        .insert(payload)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+};
+
+export const updateAttemptErrorOrigin = async (attemptId: number, errorOrigin: string) => {
+    const { error } = await supabase
+        .from('exam_attempts')
+        .update({ error_origin: errorOrigin })
+        .eq('id', attemptId);
+    if (error) throw error;
+};
+
+export const fetchExamAttempts = async (examId: number) => {
+    const { data, error } = await supabase
+        .from('exam_attempts')
+        .select('*')
+        .eq('exam_id', examId);
+    if (error) throw error;
+    return (data || []) as any[];
+};
+
+// ============================================================
+// Supabase Edge Function — Extração de PDF via Gemini
+// ============================================================
+
+export const extractQuestionsFromPDF = async (pdfBase64: string, specialty: string, subtopic: string) => {
+    const { data, error } = await supabase.functions.invoke('extract-pdf-questions', {
+        body: { pdf_base64: pdfBase64, specialty, subtopic }
+    });
+
+    if (error) {
+        console.error('[extractQuestionsFromPDF] Edge Function error:', error);
+        throw new Error('Falha ao processar o PDF com IA. Verifique sua conexão ou se as Edge Functions estão ativas.');
+    }
+
+    return data.questions; // Esperamos um { questions: [...] }
+};

@@ -96,3 +96,29 @@ export interface PersonalGoal {
   created_at: string;
 }
 
+export interface ExamQuestion {
+  id: number;
+  exam_id: number;
+  question_number: number;
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  option_e: string | null;
+  correct_option: string;
+  specialty: string | null;
+  subtopic: string | null;
+  explanation: string | null;
+  created_at: string;
+}
+
+export interface ExamAttempt {
+  id: number;
+  exam_id: number;
+  question_id: number;
+  selected_option: string;
+  is_correct: boolean;
+  error_origin: ErrorOrigin | null;
+  created_at: string;
+}
