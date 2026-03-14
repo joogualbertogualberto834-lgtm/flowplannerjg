@@ -8,9 +8,11 @@ import { ReviewsView } from './views/ReviewsView';
 import { FlashcardsView } from './views/FlashcardsView';
 import { ErrorsView } from './views/ErrorsView';
 import { WeeklyView } from './views/WeeklyView';
+import { QuizView } from './views/QuizView';
+import { CrosswordView } from './views/CrosswordView';
 import { useData } from './hooks/useData';
 
-type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly';
+type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'quiz' | 'crossword';
 
 import { useAuth } from './hooks/useAuth';
 import { AuthView } from './views/AuthView';
@@ -68,6 +70,10 @@ export default function App() {
         return <ErrorsView errors={errors} topics={topics} onUpdate={refresh} />;
       case 'weekly':
         return <WeeklyView topics={topics} />;
+      case 'quiz':
+        return <QuizView groupedTopics={groupedTopics} />;
+      case 'crossword':
+        return <CrosswordView />;
       default:
         return null;
     }
