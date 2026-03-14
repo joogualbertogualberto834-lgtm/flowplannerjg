@@ -23,7 +23,7 @@ export async function processQuestions(text: string): Promise<{ answer: string; 
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash-latest",
       contents: `Você é um especialista em educação médica. Sua tarefa é transformar o texto de um resumo médico, apostila ou questão em um conjunto de palavras cruzadas de alta qualidade.
       
       Instruções:
@@ -99,7 +99,7 @@ export async function generateRandomCrossword(topic: string): Promise<{ answer: 
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash-latest",
       contents: `Gere 10 dicas de palavras cruzadas sobre o tema médico: ${topic}. 
       Foque em conteúdo de alto rendimento para exames de residência (Revalida, PSU, etc.).
       
@@ -164,7 +164,7 @@ export async function extractQuestionsFromPDF(pdfBase64: string, specialty: stri
     `;
 
     const result = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-1.5-flash-latest",
       contents: [
         {
           role: "user",
