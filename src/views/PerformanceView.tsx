@@ -156,16 +156,19 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
     const handleFileUpload = async (examId: number, file: File, specialty: string, subtopic: string) => {
         setIsExtracting(true);
         try {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = async () => {
-                const base64 = (reader.result as string).split(',')[1];
-                const questions = await extractQuestionsFromPDF(base64, specialty, subtopic);
-                await saveExamQuestions(examId, questions);
-                alert(`Sucesso! ${questions.length} questões extraídas.`);
-                loadAll();
-            };
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                reader.onerror = reject;
+            });
+
+            const questions = await extractQuestionsFromPDF(base64, specialty, subtopic);
+            await saveExamQuestions(examId, questions);
+            alert(`Sucesso! ${questions.length} questões extraídas.`);
+            await loadAll();
         } catch (err: any) {
+            console.error('[handleFileUpload] Erro:', err);
             alert('Erro na extração: ' + err.message);
         } finally {
             setIsExtracting(false);
@@ -223,6 +226,7 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
     const handleClassifyError = async (origin: string) => {
         if (!lastAttemptId || !activeQuiz) return;
         const question = quizQuestions[currentQuestionIdx];
+        const currentSubtopic = question.subtopic || 'Geral';
 
         try {
             await updateAttemptErrorOrigin(lastAttemptId, origin);
@@ -234,22 +238,22 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
                     exam_id: activeQuiz.id,
                     specialty: question.specialty || 'Geral',
                     topic_id: question.topic_id || null,
-                    subtopic: question.subtopic || question.question_text.slice(0, 50) + '...',
+                    subtopic: currentSubtopic,
                     error_origin: origin,
                     notes: `Erro automático do Quiz: ${activeQuiz.name}`
                 });
 
                 // Se houver 2+ erros de Falta de Contato no mesmo subtema -> Seção 3 (Foco)
                 const sameSubtopicErrors = examErrors.filter(e =>
-                    e.subtopic === (question.subtopic || question.question_text.slice(0, 50) + '...') &&
+                    e.subtopic === currentSubtopic &&
                     e.error_origin === 'falta_contato'
                 );
 
-                if (origin === 'falta_contato' && sameSubtopicErrors.length >= 1) { // >=1 porque o atual ainda não está no state 'examErrors' local
+                if (origin === 'falta_contato' && sameSubtopicErrors.length >= 1) {
                     await addDifficultSubtopic({
                         specialty: question.specialty || 'Geral',
-                        topic: question.subtopic || 'Geral',
-                        subtopic: question.subtopic || 'Verificar questão',
+                        topic: currentSubtopic,
+                        subtopic: currentSubtopic,
                         notes: 'Subtema recorrente com falta de contato.'
                     });
                 }
@@ -257,7 +261,7 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
 
             setShowClassificationModal(false);
             handleNextQuestion();
-            loadAll(); // Atualiza as seções 2 e 3
+            loadAll();
         } catch (err: any) {
             alert('Erro ao classificar: ' + err.message);
         }
@@ -590,6 +594,24 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
                             <p className="text-sm font-medium text-slate-800 leading-relaxed italic border-l-4 border-slate-200 pl-4 py-1">
                                 {quizQuestions[currentQuestionIdx].question_text}
                             </p>
+
+                            {/* Campo de Subtema EDITÁVEL por questão */}
+                            <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100/50">
+                                <label className="block">
+                                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Subtema da Questão</span>
+                                    <input
+                                        type="text"
+                                        value={quizQuestions[currentQuestionIdx].subtopic || ''}
+                                        onChange={(e) => {
+                                            const updated = [...quizQuestions];
+                                            updated[currentQuestionIdx].subtopic = e.target.value;
+                                            setQuizQuestions(updated);
+                                        }}
+                                        className="mt-1 w-full bg-transparent border-b border-blue-200 text-sm focus:border-blue-500 outline-none py-1"
+                                        placeholder="Ex: Pancreatite Aguda, IAM..."
+                                    />
+                                </label>
+                            </div>
 
                             <div className="space-y-2">
                                 {['a', 'b', 'c', 'd', 'e'].map(opt => {
