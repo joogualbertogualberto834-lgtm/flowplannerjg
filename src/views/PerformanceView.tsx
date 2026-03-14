@@ -164,9 +164,23 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
             });
 
             const questions = await extractQuestionsFromPDF(base64, specialty, subtopic);
+            console.log(`[handleFileUpload] Questions extracted: ${questions.length} for examId: ${examId}`);
             await saveExamQuestions(examId, questions);
-            alert(`Sucesso! ${questions.length} questões extraídas.`);
+            console.log(`[handleFileUpload] Questions saved to Supabase.`);
+
+            // Recarregar o dashboard
             await loadAll();
+
+            // Iniciar o quiz automaticamente
+            // Como temos o examId, podemos simular o clique no seletor de quiz
+            // Buscamos o exame na lista (mesmo que ainda não tenha dado refresh no state, 
+            // handleStartQuiz vai buscar as questões direto no Supabase)
+            const exam = exams.find(e => e.id === examId);
+            if (exam) {
+                handleStartQuiz(exam);
+            } else {
+                alert(`Sucesso! ${questions.length} questões extraídas.`);
+            }
         } catch (err: any) {
             console.error('[handleFileUpload] Erro:', err);
             alert('Erro na extração: ' + err.message);
