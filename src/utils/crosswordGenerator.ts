@@ -1,4 +1,4 @@
-import { Clue, CrosswordData, GridCell } from '../types';
+import { Clue, CrosswordData, GridCell } from '../crosswordTypes';
 
 /**
  * A more robust crossword generator.
@@ -21,7 +21,7 @@ export function generateCrossword(words: { answer: string; clue: string }[], siz
 
   // Try multiple times with different starting words to find the best layout
   const attempts = Math.min(sortedWords.length, 5);
-  
+
   for (let attempt = 0; attempt < attempts; attempt++) {
     const grid: string[][] = Array(size).fill(null).map(() => Array(size).fill(''));
     const currentPlacedWords: Clue[] = [];
@@ -30,7 +30,7 @@ export function generateCrossword(words: { answer: string; clue: string }[], siz
     const first = sortedWords[attempt];
     const startRow = Math.floor(size / 2);
     const startCol = Math.max(0, Math.floor((size - first.answer.length) / 2));
-    
+
     for (let i = 0; i < first.answer.length; i++) {
       grid[startRow][startCol + i] = first.answer[i];
     }
@@ -38,7 +38,7 @@ export function generateCrossword(words: { answer: string; clue: string }[], siz
 
     // Try to place other words
     const remainingWords = [...sortedWords.slice(0, attempt), ...sortedWords.slice(attempt + 1)];
-    
+
     for (const word of remainingWords) {
       let bestPlacement: { row: number; col: number; direction: 'across' | 'down'; score: number } | null = null;
 
@@ -80,7 +80,7 @@ export function generateCrossword(words: { answer: string; clue: string }[], siz
     if (!bestResult || currentPlacedWords.length > bestResult.placedWords.length) {
       bestResult = { grid, placedWords: currentPlacedWords };
     }
-    
+
     // If we placed all words, we can stop
     if (currentPlacedWords.length === sortedWords.length) break;
   }
@@ -90,7 +90,7 @@ export function generateCrossword(words: { answer: string; clue: string }[], siz
   const { grid, placedWords } = bestResult;
 
   // Assign numbers and build final structure
-  const finalGrid: GridCell[][] = Array(size).fill(null).map((_, r) => 
+  const finalGrid: GridCell[][] = Array(size).fill(null).map((_, r) =>
     Array(size).fill(null).map((_, c) => ({
       char: grid[r][c],
       isBlack: grid[r][c] === '',
@@ -105,7 +105,7 @@ export function generateCrossword(words: { answer: string; clue: string }[], siz
 
   const startPositions = new Set<string>();
   placedWords.forEach(pw => startPositions.add(`${pw.row}-${pw.col}`));
-  
+
   const sortedStarts = Array.from(startPositions)
     .map(s => {
       const [r, c] = s.split('-').map(Number);
@@ -143,7 +143,7 @@ export function generateCrossword(words: { answer: string; clue: string }[], siz
 function canPlace(grid: string[][], word: string, row: number, col: number, direction: 'across' | 'down', size: number, allowNoIntersection: boolean = false): boolean {
   if (direction === 'across') {
     if (col + word.length > size) return false;
-    
+
     // Check cell before and after (must be empty or boundary)
     if (col > 0 && grid[row][col - 1] !== '') return false;
     if (col + word.length < size && grid[row][col + word.length] !== '') return false;
@@ -151,7 +151,7 @@ function canPlace(grid: string[][], word: string, row: number, col: number, dire
     let intersections = 0;
     for (let i = 0; i < word.length; i++) {
       const current = grid[row][col + i];
-      
+
       // Must match existing char or be empty
       if (current !== '' && current !== word[i]) return false;
       if (current === word[i]) intersections++;
@@ -165,7 +165,7 @@ function canPlace(grid: string[][], word: string, row: number, col: number, dire
     return allowNoIntersection || intersections > 0;
   } else {
     if (row + word.length > size) return false;
-    
+
     // Check cell above and below
     if (row > 0 && grid[row - 1][col] !== '') return false;
     if (row + word.length < size && grid[row + word.length][col] !== '') return false;
@@ -173,7 +173,7 @@ function canPlace(grid: string[][], word: string, row: number, col: number, dire
     let intersections = 0;
     for (let i = 0; i < word.length; i++) {
       const current = grid[row + i][col];
-      
+
       if (current !== '' && current !== word[i]) return false;
       if (current === word[i]) intersections++;
 

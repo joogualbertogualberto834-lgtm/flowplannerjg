@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import { exec } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -171,12 +172,12 @@ db.exec(`
 `);
 
 // Migrations for existing DBs
-try { db.exec("ALTER TABLE user_progress ADD COLUMN previous_state TEXT"); } catch(e) {}
-try { db.exec("ALTER TABLE flashcards ADD COLUMN last_difficulty INTEGER"); } catch(e) {}
-try { db.exec("ALTER TABLE flashcards ADD COLUMN current_interval INTEGER DEFAULT 0"); } catch(e) {}
-try { db.exec("ALTER TABLE flashcards ADD COLUMN repetition_level INTEGER DEFAULT 0"); } catch(e) {}
-try { db.exec("ALTER TABLE flashcards ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP"); } catch(e) {}
-try { db.exec("ALTER TABLE study_log ADD COLUMN topic_id INTEGER"); } catch(e) {}
+try { db.exec("ALTER TABLE user_progress ADD COLUMN previous_state TEXT"); } catch (e) { }
+try { db.exec("ALTER TABLE flashcards ADD COLUMN last_difficulty INTEGER"); } catch (e) { }
+try { db.exec("ALTER TABLE flashcards ADD COLUMN current_interval INTEGER DEFAULT 0"); } catch (e) { }
+try { db.exec("ALTER TABLE flashcards ADD COLUMN repetition_level INTEGER DEFAULT 0"); } catch (e) { }
+try { db.exec("ALTER TABLE flashcards ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP"); } catch (e) { }
+try { db.exec("ALTER TABLE study_log ADD COLUMN topic_id INTEGER"); } catch (e) { }
 
 // Seed Topics
 const seedTopics = () => {
@@ -215,10 +216,10 @@ async function startServer() {
 
   app.post("/api/study-session", (req, res) => {
     const { topic_id, score, duration_minutes } = req.body;
-    
+
     // Get current progress
     let progress = db.prepare("SELECT * FROM user_progress WHERE topic_id = ?").get(topic_id);
-    
+
     if (!progress) {
       db.prepare("INSERT INTO user_progress (topic_id) VALUES (?)").run(topic_id);
       progress = { current_interval: 0, urgency_count: 0 };
@@ -277,7 +278,7 @@ async function startServer() {
   app.post("/api/study-session/undo", (req, res) => {
     const { topic_id } = req.body;
     const progress = db.prepare("SELECT previous_state FROM user_progress WHERE topic_id = ?").get(topic_id);
-    
+
     if (progress && progress.previous_state) {
       const prev = JSON.parse(progress.previous_state);
       db.prepare(`
@@ -285,10 +286,10 @@ async function startServer() {
         SET current_interval = ?, last_score = ?, next_review_date = ?, urgency_count = ?, previous_state = NULL
         WHERE topic_id = ?
       `).run(prev.current_interval, prev.last_score, prev.next_review_date, prev.urgency_count, topic_id);
-      
+
       // Also remove last log entry for this topic
       db.prepare("DELETE FROM study_log WHERE topic_id = ? ORDER BY id DESC LIMIT 1").run(topic_id);
-      
+
       res.json({ success: true });
     } else {
       res.status(400).json({ error: "No state to undo" });
@@ -307,10 +308,10 @@ async function startServer() {
       SET current_interval = 0, last_score = 0, next_review_date = NULL, urgency_count = 0, previous_state = NULL
       WHERE topic_id = ?
     `).run(req.params.id);
-    
+
     // Optional: remove all logs for this topic?
     db.prepare("DELETE FROM study_log WHERE topic_id = ?").run(req.params.id);
-    
+
     res.json({ success: true });
   });
 
@@ -321,13 +322,13 @@ async function startServer() {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
-      
+
       const dayData = db.prepare(`
         SELECT SUM(duration_minutes) as total_minutes, AVG(score) as avg_score
         FROM study_log
         WHERE date = ?
       `).get(dateStr);
-      
+
       effort.push({
         date: dateStr,
         total_minutes: dayData.total_minutes || 0,
@@ -404,11 +405,11 @@ async function startServer() {
 
   app.post("/api/flashcards", (req, res) => {
     const { topic_id, front, back } = req.body;
-    
+
     if (!topic_id || isNaN(parseInt(topic_id))) {
       return res.status(400).json({ error: "ID do tema inválido ou ausente" });
     }
-    
+
     console.log(`Adding flashcard: topic_id=${topic_id}, front=${front?.substring(0, 20)}...`);
     try {
       const result = db.prepare("INSERT INTO flashcards (topic_id, front, back) VALUES (?, ?, ?)").run(topic_id, front, back);
@@ -428,7 +429,7 @@ async function startServer() {
   app.post("/api/flashcards/:id/score", (req, res) => {
     const { difficulty, duration_minutes } = req.body; // 0: Errei, 1: Difícil, 2: Bom, 3: Fácil
     const card = db.prepare("SELECT * FROM flashcards WHERE id = ?").get(req.params.id);
-    
+
     if (!card) return res.status(404).json({ error: "Card not found" });
 
     let newInterval = card.current_interval || 0;
@@ -457,7 +458,7 @@ async function startServer() {
       }
       newLevel = 0; // Reset level for Easy? Or keep? Usually Easy jumps ahead.
     }
-    
+
     const nextReview = new Date();
     if (newInterval > 0) {
       nextReview.setDate(nextReview.getDate() + newInterval);
@@ -466,10 +467,10 @@ async function startServer() {
       // For simplicity, set to 1 minute from now
       nextReview.setMinutes(nextReview.getMinutes() + 1);
     }
-    
+
     db.prepare("UPDATE flashcards SET next_review = ?, last_difficulty = ?, current_interval = ?, repetition_level = ? WHERE id = ?")
       .run(nextReview.toISOString(), difficulty, newInterval, newLevel, req.params.id);
-    
+
     // Log the study
     db.prepare(`
       INSERT INTO study_log (activity_type, duration_minutes, topic_id)
@@ -495,9 +496,46 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.post("/api/quizzes/generate", (req, res) => {
+    const { topic_title } = req.body;
+    if (!topic_title) {
+      return res.status(400).json({ error: "Topic title is required" });
+    }
+
+    console.log(`Generating quiz for: ${topic_title}`);
+
+    // Execute the python script
+    // We use the same 'uv' environment
+    const pythonPath = "/Users/Joao/.local/bin/uv";
+    const scriptPath = path.join(__dirname, "scripts", "generate_quiz.py");
+
+    exec(`${pythonPath} tool run --from notebooklm-mcp-server python3 "${scriptPath}" "${topic_title}"`, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Exec error: ${error}`);
+        return res.status(500).json({ error: "Failed to execute quiz generation script" });
+      }
+
+      try {
+        // Find the JSON line in output (the script prints progress then JSON)
+        const lines = stdout.trim().split('\n');
+        const lastLine = lines[lines.length - 1];
+        const result = JSON.parse(lastLine);
+
+        if (result.status === "success") {
+          res.json(result);
+        } else {
+          res.status(500).json({ error: result.message || "Quiz generation failed" });
+        }
+      } catch (parseError) {
+        console.error(`Parse error: ${parseError}. Output was: ${stdout}`);
+        res.status(500).json({ error: "Failed to parse quiz generation result" });
+      }
+    });
+  });
+
   app.post("/api/study-log", (req, res) => {
     const { duration_minutes, activity_type = 'Stopwatch' } = req.body;
-    
+
     if (!duration_minutes || duration_minutes <= 0) {
       return res.status(400).json({ error: "Duração inválida" });
     }
@@ -507,7 +545,7 @@ async function startServer() {
         INSERT INTO study_log (activity_type, duration_minutes, date)
         VALUES (?, ?, date('now'))
       `).run(activity_type, duration_minutes);
-      
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error saving study log:", error);
