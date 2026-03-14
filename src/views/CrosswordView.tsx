@@ -24,6 +24,7 @@ export function CrosswordView() {
   const [cellStatus, setCellStatus] = useState<Record<string, 'correct' | 'incorrect' | 'neutral'>>({});
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (crossword) {
@@ -109,30 +110,39 @@ export function CrosswordView() {
     } else {
       setSelectedCell({ r, c });
     }
+
+    // Foca o input invisível para abrir o teclado no celular
+    setTimeout(() => {
+      hiddenInputRef.current?.focus();
+    }, 10);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleCharInput = (char: string) => {
+    if (!selectedCell || !crossword) return;
+    const { r, c } = selectedCell;
+    const newGrid = userGrid.map(row => [...row]);
+    newGrid[r][c] = char.toUpperCase();
+    setUserGrid(newGrid);
+
+    checkWordCorrectness(r, c, 'across', newGrid);
+    checkWordCorrectness(r, c, 'down', newGrid);
+
+    if (direction === 'across') {
+      if (c + 1 < crossword.size && !crossword.grid[r][c + 1].isBlack) {
+        setSelectedCell({ r, c: c + 1 });
+      }
+    } else {
+      if (r + 1 < crossword.size && !crossword.grid[r + 1][c].isBlack) {
+        setSelectedCell({ r: r + 1, c });
+      }
+    }
+  };
+
+  const handleActionInput = (action: string) => {
     if (!selectedCell || !crossword) return;
     const { r, c } = selectedCell;
 
-    if (e.key.length === 1 && e.key.match(/[a-z]/i)) {
-      const newGrid = userGrid.map(row => [...row]);
-      newGrid[r][c] = e.key.toUpperCase();
-      setUserGrid(newGrid);
-
-      checkWordCorrectness(r, c, 'across', newGrid);
-      checkWordCorrectness(r, c, 'down', newGrid);
-
-      if (direction === 'across') {
-        if (c + 1 < crossword.size && !crossword.grid[r][c + 1].isBlack) {
-          setSelectedCell({ r, c: c + 1 });
-        }
-      } else {
-        if (r + 1 < crossword.size && !crossword.grid[r + 1][c].isBlack) {
-          setSelectedCell({ r: r + 1, c });
-        }
-      }
-    } else if (e.key === 'Backspace') {
+    if (action === 'Backspace') {
       const newGrid = userGrid.map(row => [...row]);
       if (newGrid[r][c] === '') {
         let prevR = r, prevC = c;
@@ -148,15 +158,23 @@ export function CrosswordView() {
         checkWordCorrectness(r, c, 'across', newGrid);
         checkWordCorrectness(r, c, 'down', newGrid);
       }
-    } else if (e.key.startsWith('Arrow')) {
+    } else if (action.startsWith('Arrow')) {
       let nr = r, nc = c;
-      if (e.key === 'ArrowRight') nc++;
-      if (e.key === 'ArrowLeft') nc--;
-      if (e.key === 'ArrowDown') nr++;
-      if (e.key === 'ArrowUp') nr--;
+      if (action === 'ArrowRight') nc++;
+      if (action === 'ArrowLeft') nc--;
+      if (action === 'ArrowDown') nr++;
+      if (action === 'ArrowUp') nr--;
       if (nr >= 0 && nr < crossword.size && nc >= 0 && nc < crossword.size && !crossword.grid[nr][nc].isBlack) {
         setSelectedCell({ r: nr, c: nc });
       }
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key.length === 1 && e.key.match(/[a-z0-9]/i)) {
+      handleCharInput(e.key);
+    } else if (e.key === 'Backspace' || e.key.startsWith('Arrow')) {
+      handleActionInput(e.key);
     }
   };
 
@@ -330,7 +348,33 @@ export function CrosswordView() {
             <div className="flex flex-col xl:flex-row gap-6">
 
               {/* Grid Container */}
-              <div className="flex-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center overflow-x-auto">
+              <div className="flex-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center overflow-x-auto relative">
+
+                {/* Teclado oculto para dispositivos móveis */}
+                <input
+                  ref={hiddenInputRef}
+                  type="text"
+                  className="absolute opacity-0 w-px h-px overflow-hidden ml-[-9999px] pointer-events-none"
+                  value=""
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.length > 0) {
+                      const char = val.charAt(val.length - 1);
+                      if (char.match(/[a-z0-9]/i)) {
+                        handleCharInput(char);
+                      }
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Backspace' || e.key.startsWith('Arrow')) {
+                      handleActionInput(e.key);
+                    }
+                  }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck="false"
+                />
+
                 <div
                   ref={gridRef}
                   onKeyDown={handleKeyDown}

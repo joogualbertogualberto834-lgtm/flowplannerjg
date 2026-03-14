@@ -6,7 +6,7 @@ function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
-type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly';
+type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword';
 
 const TAB_LABELS: Record<TabId, string> = {
     dashboard: 'Dashboard',
@@ -15,6 +15,7 @@ const TAB_LABELS: Record<TabId, string> = {
     flashcards: 'Flashcards',
     errors: 'Caderno de Erros',
     weekly: 'Semana',
+    crossword: 'Palavras Cruzadas',
 };
 
 import { RefreshCw, LogOut, Menu } from 'lucide-react';
