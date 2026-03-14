@@ -37,7 +37,7 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose }: SidebarProp
         <aside
             className={`
                 fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-50 
-                transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:block
+                transition-transform duration-300 ease-in-out lg:translate-x-0
                 ${isOpen ? 'translate-x-0' : '-translate-x-full'}
             `}
         >
