@@ -544,11 +544,14 @@ export const extractQuestionsFromPDF = async (pdfBase64: string, specialty: stri
     });
 
     if (error) {
-        console.error('[extractQuestionsFromPDF] Edge Function error:', error);
-        // Tentar extrair a mensagem de erro do corpo da resposta se disponível
-        const errorMsg = error.message || 'Falha ao processar o PDF com IA.';
-        throw new Error(`${errorMsg} Verifique sua conexão ou as configurações das Edge Functions.`);
+        console.error('[extractQuestionsFromPDF] Invocation error:', error);
+        throw new Error(error.message || 'Erro na chamada da função.');
     }
 
-    return data.questions; // Esperamos um { questions: [...] }
+    if (data && data.error) {
+        console.error('[extractQuestionsFromPDF] Business error:', data.error);
+        throw new Error(data.error);
+    }
+
+    return data.questions;
 };
