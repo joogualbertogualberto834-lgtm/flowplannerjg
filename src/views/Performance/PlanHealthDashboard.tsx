@@ -107,20 +107,28 @@ export function PlanHealthDashboard({ statusHistory, correlationData, sustainabi
             <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100 flex flex-col">
                 <h3 className="text-lg font-bold text-slate-800 mb-8">Sustentabilidade</h3>
                 <div className="flex-1 flex flex-col items-center justify-center text-center">
-                    <div className={`w-32 h-32 rounded-full border-8 border-slate-50 flex items-center justify-center relative mb-6`}>
-                        <motion.div
-                            initial={{ rotate: -90 }}
-                            animate={{ rotate: (sustainabilityIndex / 100 * 360) - 90 }}
-                            className="absolute inset-x-0 top-0 flex justify-center -mt-2"
-                        >
-                            <div className="w-4 h-4 rounded-full bg-white shadow-md border-2 border-slate-800" />
-                        </motion.div>
-                        <div className="flex flex-col items-center">
-                            <span className="text-3xl font-black text-slate-800">{sustainabilityIndex}%</span>
-                            <ShieldCheck size={20} className={sust.color} />
+                    {sustainabilityIndex !== null ? (
+                        <>
+                            <div className={`w-32 h-32 rounded-full border-8 border-slate-50 flex items-center justify-center relative mb-6`}>
+                                <motion.div
+                                    initial={{ rotate: -90 }}
+                                    animate={{ rotate: (sustainabilityIndex / 100 * 360) - 90 }}
+                                    className="absolute inset-x-0 top-0 flex justify-center -mt-2"
+                                >
+                                    <div className="w-4 h-4 rounded-full bg-white shadow-md border-2 border-slate-800" />
+                                </motion.div>
+                                <div className="flex flex-col items-center">
+                                    <span className="text-3xl font-black text-slate-800">{sustainabilityIndex}%</span>
+                                    <ShieldCheck size={20} className={sust.color} />
+                                </div>
+                            </div>
+                            <p className={`text-[10px] font-bold uppercase tracking-widest ${sust.color}`}>{sust.label}</p>
+                        </>
+                    ) : (
+                        <div className="p-4">
+                            <p className="text-xs text-slate-400 italic">Crie metas de saúde e exercício para ver o impacto no desempenho.</p>
                         </div>
-                    </div>
-                    <p className={`text-[10px] font-bold uppercase tracking-widest ${sust.color}`}>{sust.label}</p>
+                    )}
                 </div>
             </div>
         </div>

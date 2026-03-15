@@ -57,6 +57,7 @@ export interface Exam {
   name: string;
   date: string;
   type: 'simulado' | 'prova_integra';
+  specialties?: string[];
   notes: string | null;
   created_at: string;
 }
@@ -68,6 +69,7 @@ export interface ExamError {
   exam_id: number | null;
   exam_name?: string;
   specialty: string;
+  topic: string;
   topic_id: number | null;
   subtopic: string;
   error_origin: ErrorOrigin;

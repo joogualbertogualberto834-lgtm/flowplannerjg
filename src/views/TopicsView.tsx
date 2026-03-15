@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, ChevronDown, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
@@ -20,13 +20,20 @@ interface TopicsViewProps {
 }
 
 export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
-    const [expanded, setExpanded] = useState<string | null>(null);
+    const [expanded, setExpanded] = useState<string[]>([]);
     const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
     const [score, setScore] = useState('');
     const [duration, setDuration] = useState('30');
     const [isSubmitting, setIsSubmitting] = useState(false);
     // Erro inline no modal — não fecha o app, informa exatamente o que falhou
     const [submitError, setSubmitError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const keys = Object.keys(groupedTopics);
+        if (keys.length > 0 && expanded.length === 0) {
+            setExpanded(keys);
+        }
+    }, [groupedTopics]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -93,7 +100,11 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
                     className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm"
                 >
                     <button
-                        onClick={() => setExpanded(expanded === specialty ? null : specialty)}
+                        onClick={() => setExpanded(prev =>
+                            prev.includes(specialty)
+                                ? prev.filter(s => s !== specialty)
+                                : [...prev, specialty]
+                        )}
                         className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
                     >
                         <div className="flex items-center gap-3">
@@ -106,13 +117,13 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
                         <ChevronDown
                             className={cn(
                                 'text-slate-400 transition-transform',
-                                expanded === specialty && 'rotate-180',
+                                expanded.includes(specialty) && 'rotate-180',
                             )}
                         />
                     </button>
 
                     <AnimatePresence>
-                        {expanded === specialty && (
+                        {expanded.includes(specialty) && (
                             <motion.div
                                 initial={{ height: 0 }}
                                 animate={{ height: 'auto' }}

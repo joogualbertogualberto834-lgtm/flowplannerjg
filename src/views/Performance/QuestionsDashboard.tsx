@@ -6,6 +6,7 @@ import { TrendingUp, TrendingDown, Target } from 'lucide-react';
 interface QuestionsDashboardProps {
     weeklyData: { week: string; count: number; target: number }[];
     specialtyData: { name: string; percentage: number; trend: 'up' | 'down' | 'stable' }[];
+    isNewUser?: boolean;
     stats: {
         total: number;
         avgRecent: number;
@@ -15,7 +16,7 @@ interface QuestionsDashboardProps {
     };
 }
 
-export function QuestionsDashboard({ weeklyData, specialtyData, stats }: QuestionsDashboardProps) {
+export function QuestionsDashboard({ weeklyData, specialtyData, stats, isNewUser }: QuestionsDashboardProps) {
     const trend = stats.avgRecent - stats.avgPrevious;
     const isPositive = trend >= 0;
 
@@ -106,8 +107,8 @@ export function QuestionsDashboard({ weeklyData, specialtyData, stats }: Questio
                 {/* Aproveitamento por Especialidade */}
                 <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100 flex flex-col">
                     <h3 className="text-lg font-bold text-slate-800 mb-6">Aproveitamento</h3>
-                    <div className="flex-1 space-y-5">
-                        {specialtyData.map((spec) => {
+                    <div className="space-y-6 flex-1">
+                        {specialtyData.length > 0 ? specialtyData.map((spec) => {
                             const getColors = (val: number) => {
                                 if (val < 60) return 'bg-red-500';
                                 if (val < 70) return 'bg-yellow-500';
@@ -134,7 +135,11 @@ export function QuestionsDashboard({ weeklyData, specialtyData, stats }: Questio
                                     </div>
                                 </div>
                             );
-                        })}
+                        }) : (
+                            <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                                <p className="text-xs text-slate-400 italic">Faça questões para ver seu aproveitamento por especialidade aqui.</p>
+                            </div>
+                        )}
                     </div>
 
                     <div className="mt-8 pt-6 border-t border-slate-50">
@@ -145,14 +150,40 @@ export function QuestionsDashboard({ weeklyData, specialtyData, stats }: Questio
                             <div>
                                 <p className="text-[10px] font-bold text-blue-400 uppercase">Fase de Preparação</p>
                                 <p className="text-xs font-bold text-blue-800">
-                                    {stats.monthsToExam ?? '?'} meses para a prova. Ideal: {stats.idealVolume ?? '---'} questões/sem.
+                                    {stats.monthsToExam !== null ? `${stats.monthsToExam} meses para a prova.` : 'Cadastre sua prova para ver o volume ideal por fase.'}
                                 </p>
-                                <p className="text-[10px] text-blue-500 font-medium">Sua média: {Math.round(stats.avgRecent)} questões/sem.</p>
+                                {stats.idealVolume !== null && (
+                                    <p className="text-[10px] text-blue-500 font-medium">Ideal: {stats.idealVolume} questões/sem. Sua média: {Math.round(stats.avgRecent)}/sem.</p>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {isNewUser && (
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-8 bg-blue-600 text-white rounded-[40px] flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl shadow-blue-200"
+                >
+                    <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md">
+                            <Target size={32} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black">Pronto para a primeira bateria?</h3>
+                            <p className="text-blue-100 text-sm">O painel de questões será preenchido conforme você realizar seus estudos.</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'dashboard' }))}
+                        className="px-10 py-5 bg-white text-blue-600 rounded-[28px] font-black hover:bg-slate-50 transition-all flex items-center gap-2"
+                    >
+                        Ir para Estudos
+                    </button>
+                </motion.div>
+            )}
         </div>
     );
 }

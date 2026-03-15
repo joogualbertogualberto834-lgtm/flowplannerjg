@@ -40,7 +40,9 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
                                 <X size={18} />
                             </button>
                         </div>
-                        {children}
+                        <div className="max-h-[85vh] overflow-y-auto pr-2">
+                            {children}
+                        </div>
                     </motion.div>
                 </div>
             )}

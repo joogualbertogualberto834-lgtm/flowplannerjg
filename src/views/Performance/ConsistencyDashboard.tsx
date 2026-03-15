@@ -7,12 +7,13 @@ interface ConsistencyDashboardProps {
     currentStreak: number;
     recordStreak: number;
     weeklyConsistency: number;
+    weakestDay?: string | null;
     advice?: {
         revisionVsQuestions: boolean;
     };
 }
 
-export function ConsistencyDashboard({ activityData, currentStreak, recordStreak, weeklyConsistency, advice }: ConsistencyDashboardProps) {
+export function ConsistencyDashboard({ activityData, currentStreak, recordStreak, weeklyConsistency, weakestDay, advice }: ConsistencyDashboardProps) {
     return (
         <div className="space-y-6">
             {advice?.revisionVsQuestions && (
@@ -45,7 +46,7 @@ export function ConsistencyDashboard({ activityData, currentStreak, recordStreak
                     </div>
 
                     <div className="flex flex-wrap gap-1">
-                        {activityData.map((day, idx) => {
+                        {activityData.length > 0 ? activityData.map((day, idx) => {
                             const getColor = (intensity: number) => {
                                 switch (intensity) {
                                     case 0: return 'bg-slate-50';
@@ -63,7 +64,9 @@ export function ConsistencyDashboard({ activityData, currentStreak, recordStreak
                                     title={day.date}
                                 />
                             );
-                        })}
+                        }) : (
+                            <p className="text-xs text-slate-400 italic py-4">Seu calendário começa a partir de hoje. Continue registrando para ver seu histórico.</p>
+                        )}
                     </div>
 
                     <div className="mt-6 flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase">
@@ -94,6 +97,18 @@ export function ConsistencyDashboard({ activityData, currentStreak, recordStreak
                         </div>
                         <p className="text-[10px] font-bold text-emerald-600/50 uppercase mb-1">Seu Recorde</p>
                         <p className="text-3xl font-black text-emerald-700">{recordStreak} dias</p>
+                    </div>
+
+                    <div className="p-4">
+                        {weakestDay ? (
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                                {weakestDay} costuma ser seu dia com menos atividade registrada. Tente registrar pelo menos 1 erro ou revisão nesse dia para manter a consistência.
+                            </p>
+                        ) : (
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                                Continue registrando atividades para ver insights personalizados sobre seus padrões de estudo.
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>

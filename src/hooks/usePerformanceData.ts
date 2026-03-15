@@ -61,251 +61,392 @@ export function usePerformanceData() {
         if (loading) return null;
 
         const now = new Date();
-        const fiftyFiveDaysAgo = subDays(now, 55);
-        const twoWeeksAgo = subDays(now, 14);
 
-        // --- C1: Gap Closure (30%) ---
-        const consolidatedCards = flashcards.filter(f => f.repetition_level >= 5).length;
-        const totalOldGaps = errors.filter(e =>
-            e.error_origin === 'falta_contato' &&
-            new Date(e.created_at) < fiftyFiveDaysAgo
-        ).length;
-        const c1 = totalOldGaps > 0 ? (consolidatedCards / totalOldGaps) * 100 : 100;
+        // --- CORREÇÃO 1 — generateWeeklyData ---
+        const generateWeeklyData = (errorsList: ExamError[], goalsList: PersonalGoal[]) => {
+            const studyGoal = goalsList.find(g => g.category === 'estudo');
+            const weeklyTarget = studyGoal ? studyGoal.target_value : 80;
 
-        // --- C2: Non-relapse (25%) ---
-        const subtopicCounts: Record<string, number> = {};
-        errors.forEach(e => {
-            const key = `${e.specialty}-${e.subtopic}`;
-            subtopicCounts[key] = (subtopicCounts[key] || 0) + 1;
-        });
-        const totalSubtopics = Object.keys(subtopicCounts).length;
-        const recurrentSubtopics = Object.values(subtopicCounts).filter(count => count >= 2).length;
-        const c2 = totalSubtopics > 0 ? 100 - (recurrentSubtopics / totalSubtopics * 100) : 100;
-
-        // --- C3: Sim Consistency (20%) ---
-        const examsWithFeedback = exams.filter(e => (e as any).slider_tempo !== null).length;
-        const c3 = exams.length > 0 ? (examsWithFeedback / exams.length) * 100 : 100;
-
-        // --- C4 & Study Goals Logic (Problem 5 & 8) ---
-        const studyGoals = goals.filter(g => g.category === 'estudo');
-        const studyAttemptsByWeek: Record<string, { done: number; correct: number }> = {};
-        attempts.forEach(att => {
-            const weekStr = format(startOfWeek(new Date(att.created_at)), 'yyyy-ww');
-            if (!studyAttemptsByWeek[weekStr]) studyAttemptsByWeek[weekStr] = { done: 0, correct: 0 };
-            studyAttemptsByWeek[weekStr].done++;
-            if (att.is_correct) studyAttemptsByWeek[weekStr].correct++;
-        });
-
-        // Calculate consistency based on real goals
-        const weeksWithGoals = studyGoals.map(g => format(startOfWeek(new Date(g.created_at)), 'yyyy-ww'));
-        const uniqueWeeksWithGoals = Array.from(new Set(weeksWithGoals));
-
-        let c4 = 0;
-        if (uniqueWeeksWithGoals.length > 0) {
-            const consistentWeeks = uniqueWeeksWithGoals.filter(week => {
-                const weekGoal = studyGoals.find(g => format(startOfWeek(new Date(g.created_at)), 'yyyy-ww') === week);
-                if (!weekGoal) return false;
-                const progress = weekGoal.current_value / weekGoal.target_value;
-                return progress >= 0.70;
-            }).length;
-            c4 = (consistentWeeks / uniqueWeeksWithGoals.length) * 100;
-        }
-
-        // --- C5: Health Balance (10%) ---
-        const recentGoals = goals.filter(g => new Date(g.created_at) >= twoWeeksAgo);
-        const healthRate = recentGoals
-            .filter(g => g.category === 'saude')
-            .reduce((acc, g) => acc + (g.current_value / (g.target_value || 1)), 0) / (recentGoals.filter(g => g.category === 'saude').length || 1);
-        const exerciseRate = recentGoals
-            .filter(g => g.category === 'exercicio')
-            .reduce((acc, g) => acc + (g.current_value / (g.target_value || 1)), 0) / (recentGoals.filter(g => g.category === 'exercicio').length || 1);
-        const c5 = (Math.min(1, (healthRate + exerciseRate) / 2)) * 100;
-
-        const medFlowIndex = Math.min(100, (c1 * 0.30) + (c2 * 0.25) + (c3 * 0.20) + (c4 * 0.15) + (c5 * 0.10));
-
-        // --- Weekly Questions Chart (Problem 5) ---
-        const last8Weeks = Array.from({ length: 8 }, (_, i) => {
-            const d = subDays(now, i * 7);
-            return format(startOfWeek(d), 'yyyy-ww');
-        }).reverse();
-
-        const weeklyData = last8Weeks.map(week => {
-            const data = studyAttemptsByWeek[week] || { done: 0, correct: 0 };
-            const weekGoal = studyGoals.find(g => format(startOfWeek(new Date(g.created_at)), 'yyyy-ww') === week);
-            return {
-                week: format(parseISO(week.split('-')[0] + '-W' + week.split('-')[1]), 'dd/MM'),
-                count: data.done,
-                target: weekGoal?.target_value || 100 // Fallback to 100 if no goal set
-            };
-        });
-
-        // --- Specialty Performance (Problem 1) ---
-        const specialties = ['Pediatria', 'Ginecologia', 'Cirurgia', 'Clínica Médica', 'Preventiva'];
-        const specialtyData = specialties.map(s => {
-            const specialtyAttempts = attempts.filter(a => a.exam_questions?.specialty === s);
-            const total = specialtyAttempts.length;
-            const correct = specialtyAttempts.filter(a => a.is_correct).length;
-
-            let percentage = 0;
-            let estimado = false;
-
-            if (total > 0) {
-                percentage = (correct / total) * 100;
-            } else {
-                // Proxy logic
-                const specialtyErrorsCount = errors.filter(e => e.specialty === s).length;
-                percentage = errors.length > 0 ? 100 - (specialtyErrorsCount / errors.length * 100) : 100;
-                estimado = true;
-            }
-
-            // Trend
-            const thisWeek = format(startOfWeek(now), 'yyyy-ww');
-            const lastWeek = format(startOfWeek(subDays(now, 7)), 'yyyy-ww');
-
-            const thisWeekAcc = attempts.filter(a => a.exam_questions?.specialty === s && format(startOfWeek(new Date(a.created_at)), 'yyyy-ww') === thisWeek);
-            const lastWeekAcc = attempts.filter(a => a.exam_questions?.specialty === s && format(startOfWeek(new Date(a.created_at)), 'yyyy-ww') === lastWeek);
-
-            const thisRate = thisWeekAcc.length > 0 ? (thisWeekAcc.filter(a => a.is_correct).length / thisWeekAcc.length) * 100 : percentage;
-            const lastRate = lastWeekAcc.length > 0 ? (lastWeekAcc.filter(a => a.is_correct).length / lastWeekAcc.length) * 100 : percentage;
-
-            let trend: 'up' | 'down' | 'stable' = 'stable';
-            if (thisRate > lastRate + 3) trend = 'up';
-            else if (thisRate < lastRate - 3) trend = 'down';
-
-            return { name: s, percentage: Math.round(percentage), trend, estimado };
-        });
-
-        // --- Heatmap (Problem 2) ---
-        const heatmapData = specialties.map(specialty => {
-            const months = Array.from({ length: 6 }, (_, i) => {
-                const targetMonth = subMonths(now, 5 - i);
-                return errors.filter(e =>
-                    e.specialty === specialty &&
-                    isSameMonth(new Date(e.created_at), targetMonth)
-                ).length;
+            return Array.from({ length: 8 }, (_, i) => {
+                const weekStart = startOfWeek(subDays(now, (7 - i) * 7));
+                const weekEnd = endOfWeek(weekStart);
+                const count = errorsList.filter(e => {
+                    const d = new Date(e.created_at);
+                    return d >= weekStart && d <= weekEnd;
+                }).length;
+                return {
+                    week: format(weekStart, 'dd/MM'),
+                    count,
+                    target: weeklyTarget
+                };
             });
-            return { specialty, months };
-        });
+        };
 
-        // --- Status History (Problem 3) ---
-        const getWeekStatus = (weekStart: Date, category: 'estudo' | 'saude' | 'exercicio'): string => {
-            const weekGoals = goals.filter(g =>
-                g.category === category &&
-                isSameWeek(new Date(g.created_at), weekStart)
+        // --- CORREÇÃO 2 — generateSpecialtyData ---
+        const generateSpecialtyData = (topicsList: any[], errorsList: ExamError[]) => {
+            const specialtiesList = [
+                'Clínica Médica',
+                'Cirurgia',
+                'Pediatria',
+                'Ginecologia',
+                'Obstetrícia',
+                'Preventiva',
+                'Outras Especialidades'
+            ];
+
+            return specialtiesList.map(specialty => {
+                const topicsInSpec = topicsList.filter(
+                    t => t.specialty === specialty && t.last_score !== null
+                );
+
+                if (topicsInSpec.length === 0) {
+                    return {
+                        name: specialty,
+                        percentage: 0,
+                        trend: 'stable' as const,
+                        noData: true
+                    };
+                }
+
+                const avgScore = topicsInSpec.reduce(
+                    (acc, t) => acc + (t.last_score || 0), 0
+                ) / topicsInSpec.length;
+
+                const oneWeekAgo = subDays(now, 7);
+                const twoWeeksAgo = subDays(now, 14);
+
+                const recentTopics = topicsInSpec.filter(t => {
+                    const d = new Date(t.last_study_date || '');
+                    return d >= oneWeekAgo;
+                });
+                const prevTopics = topicsInSpec.filter(t => {
+                    const d = new Date(t.last_study_date || '');
+                    return d >= twoWeeksAgo && d < oneWeekAgo;
+                });
+
+                const recentAvg = recentTopics.length
+                    ? recentTopics.reduce((a, t) => a + (t.last_score || 0), 0) / recentTopics.length
+                    : avgScore;
+                const prevAvg = prevTopics.length
+                    ? prevTopics.reduce((a, t) => a + (t.last_score || 0), 0) / prevTopics.length
+                    : avgScore;
+
+                const trendVal = recentAvg > prevAvg + 3
+                    ? 'up'
+                    : recentAvg < prevAvg - 3
+                        ? 'down'
+                        : 'stable';
+
+                return {
+                    name: specialty,
+                    percentage: Math.round(avgScore),
+                    trend: trendVal as 'up' | 'down' | 'stable',
+                    noData: false
+                };
+            }).filter(s => !s.noData || topicsList.some(t => t.specialty === s.name));
+        };
+
+        // --- CORREÇÃO 3 — generateCardStatusData ---
+        const generateCardStatusData = (flashcardsList: Flashcard[]) => {
+            const dominated = flashcardsList.filter(f => (f.repetition_level || 0) >= 5).length;
+            const learning = flashcardsList.filter(f => (f.repetition_level || 0) > 0 && (f.repetition_level || 0) < 5).length;
+            const overdue = flashcardsList.filter(f =>
+                f.next_review &&
+                new Date(f.next_review) < now &&
+                (f.repetition_level || 0) < 5
+            ).length;
+            const pending = flashcardsList.length - dominated - learning - overdue;
+
+            return [
+                { name: 'Dominado', value: dominated, color: '#10B981' },
+                { name: 'Aprendendo', value: learning, color: '#3B82F6' },
+                { name: 'Atrasado', value: overdue, color: '#EF4444' },
+                { name: 'Pendente', value: Math.max(0, pending), color: '#94A3B8' }
+            ];
+        };
+
+        // --- CORREÇÃO 4 — generateErrorOrigins ---
+        const generateErrorOrigins = (errorsList: ExamError[]) => {
+            if (errorsList.length === 0) return [];
+
+            const total = errorsList.length;
+            const origins = ['desatencao', 'falta_contato', 'cansaco'];
+
+            const oneWeekAgo = subDays(now, 7);
+            const twoWeeksAgo = subDays(now, 14);
+
+            return origins.map(origin => {
+                const count = errorsList.filter(e => e.error_origin === origin).length;
+                const thisWeek = errorsList.filter(e =>
+                    e.error_origin === origin &&
+                    new Date(e.created_at) >= oneWeekAgo
+                ).length;
+                const lastWeek = errorsList.filter(e =>
+                    e.error_origin === origin &&
+                    new Date(e.created_at) >= twoWeeksAgo &&
+                    new Date(e.created_at) < oneWeekAgo
+                ).length;
+
+                const trendVal = thisWeek > lastWeek ? 'up' : thisWeek < lastWeek ? 'down' : 'stable';
+
+                return {
+                    type: origin as any,
+                    percentage: Math.round((count / total) * 100),
+                    trend: trendVal as any
+                };
+            });
+        };
+
+        // --- CORREÇÃO 5 — generatePositionData ---
+        const generatePositionData = (errorsList: ExamError[]) => {
+            const blocks = ['1-25', '26-50', '51-75', '76-100'];
+            return blocks.map(block => ({
+                block,
+                count: errorsList.filter(e => e.posicao_questao === block).length
+            }));
+        };
+
+        // --- CORREÇÃO 6 — generateHeatmapData ---
+        const generateHeatmapData = (errorsList: ExamError[]) => {
+            const specialtiesList = [
+                'Clínica Médica',
+                'Cirurgia',
+                'Pediatria',
+                'Ginecologia',
+                'Obstetrícia',
+                'Preventiva',
+                'Outras Especialidades'
+            ];
+            return specialtiesList.map(specialty => {
+                const months = Array.from({ length: 6 }, (_, i) => {
+                    const targetMonth = subMonths(now, 5 - i);
+                    return errorsList.filter(e => {
+                        const d = new Date(e.created_at);
+                        return e.specialty === specialty && isSameMonth(d, targetMonth);
+                    }).length;
+                });
+                return { specialty, months };
+            });
+        };
+
+        // --- CORREÇÃO 7 — generateActivityData ---
+        const generateActivityData = (errorsList: ExamError[], examsList: Exam[]) => {
+            return Array.from({ length: 56 }, (_, i) => {
+                const date = subDays(now, 55 - i);
+                const dateStr = format(date, 'yyyy-MM-dd');
+                const errorsOnDay = errorsList.filter(e => format(new Date(e.created_at), 'yyyy-MM-dd') === dateStr).length;
+                const examsOnDay = examsList.filter(e => format(new Date(e.date), 'yyyy-MM-dd') === dateStr).length;
+                const activity = errorsOnDay + (examsOnDay * 3);
+                const intensity = activity === 0 ? 0 : activity < 3 ? 1 : activity < 6 ? 2 : activity < 10 ? 3 : 4;
+                return { date: dateStr, intensity };
+            });
+        };
+
+        // --- CORREÇÃO 8 — generateStatusHistory ---
+        const generateStatusHistory = (goalsList: PersonalGoal[]) => {
+            const getStatus = (weekStart: Date, category: string): string => {
+                const weekGoals = goalsList.filter(g =>
+                    g.category === category && isSameWeek(new Date(g.created_at), weekStart)
+                );
+                if (weekGoals.length === 0) return 'gray';
+                const avg = weekGoals.reduce((acc, g) => acc + (g.current_value / (g.target_value || 1)), 0) / weekGoals.length;
+                if (avg >= 0.85) return 'green';
+                if (avg >= 0.50) return 'yellow';
+                return 'red';
+            };
+
+            const weeks = Array.from({ length: 4 }, (_, i) => startOfWeek(subDays(now, i * 7))).reverse();
+            return {
+                study: weeks.map(w => getStatus(w, 'estudo')),
+                health: weeks.map(w => getStatus(w, 'saude')),
+                exercise: weeks.map(w => getStatus(w, 'exercicio')),
+            };
+        };
+
+        // --- CORREÇÃO 9 — calculateCorrelation ---
+        const calculateCorrelation = (goalsList: PersonalGoal[], topicsList: any[]) => {
+            const healthGoals = goalsList.filter(g => g.category === 'saude');
+            const goodSleepGoals = healthGoals.filter(g => (g.current_value / (g.target_value || 1)) >= 0.8);
+            const poorSleepGoals = healthGoals.filter(g => (g.current_value / (g.target_value || 1)) < 0.5);
+
+            if (goodSleepGoals.length < 2 || poorSleepGoals.length < 2) return null;
+
+            const avgScore = (list: any[]) =>
+                list.length === 0 ? 0 : Math.round(list.reduce((a, t) => a + (t.last_score || 0), 0) / list.length);
+
+            return {
+                goodSleep: {
+                    performance: avgScore(topicsList.filter(t => (t.last_score || 0) >= 70)),
+                    recovery: goodSleepGoals.length
+                },
+                poorSleep: {
+                    performance: avgScore(topicsList.filter(t => (t.last_score || 0) < 70)),
+                    recovery: poorSleepGoals.length
+                }
+            };
+        };
+
+        // --- CORREÇÃO 10 — calculateSustainability ---
+        const calculateSustainability = (goalsList: PersonalGoal[]) => {
+            if (goalsList.length === 0) return null;
+            const rate = (list: any[]) =>
+                list.length === 0 ? 0 : Math.min(1, list.reduce((a, g) => a + (g.current_value / (g.target_value || 1)), 0) / list.length);
+
+            const sus = Math.round(
+                (rate(goalsList.filter(g => g.category === 'estudo')) * 50) +
+                (rate(goalsList.filter(g => g.category === 'saude')) * 30) +
+                (rate(goalsList.filter(g => g.category === 'exercicio')) * 20)
             );
-            if (weekGoals.length === 0) return 'gray';
-            const rate = weekGoals.reduce((acc, g) => acc + (g.current_value / (g.target_value || 1)), 0) / weekGoals.length;
-            if (rate >= 0.85) return 'green';
-            if (rate >= 0.50) return 'yellow';
-            return 'red';
+            return Math.min(100, sus);
         };
 
-        const statusLast4Weeks = Array.from({ length: 4 }, (_, i) => startOfWeek(subDays(now, i * 7))).reverse();
-        const statusHistory = {
-            study: statusLast4Weeks.map(w => getWeekStatus(w, 'estudo')),
-            health: statusLast4Weeks.map(w => getWeekStatus(w, 'saude')),
-            exercise: statusLast4Weeks.map(w => getWeekStatus(w, 'exercicio')),
+        // --- CORREÇÃO 11 — calculateNonRecurrence ---
+        const calculateNonRecurrence = (errorsList: ExamError[]) => {
+            if (errorsList.length === 0) return 100;
+            const counts: Record<string, number> = {};
+            errorsList.forEach(e => {
+                const key = `${e.specialty}-${e.subtopic}`;
+                counts[key] = (counts[key] || 0) + 1;
+            });
+            const total = Object.keys(counts).length;
+            const recurrent = Object.values(counts).filter(c => c >= 2).length;
+            return Math.round(((total - recurrent) / total) * 100);
         };
 
-        // --- Sleep Correlation (Problem 4) ---
-        const sleepGoals = goals.filter(g => g.category === 'saude');
-        const goodSleepWeeks = sleepGoals.filter(g => g.current_value / (g.target_value || 1) >= 0.8);
-        const poorSleepWeeks = sleepGoals.filter(g => g.current_value / (g.target_value || 1) < 0.5);
+        // --- CORREÇÃO 12 — calculateSimConsistency ---
+        const calculateSimConsistency = (examsList: Exam[]) => {
+            if (examsList.length === 0) return 0;
+            const withFeedback = examsList.filter(e => (e as any).slider_tempo !== null && (e as any).slider_tempo !== undefined).length;
+            return Math.round((withFeedback / examsList.length) * 100);
+        };
 
-        let correlation = null;
-        if (goodSleepWeeks.length >= 3 && poorSleepWeeks.length >= 3) {
-            const getAvgAcc = (weekGoals: PersonalGoal[]) => {
-                const weekStrings = weekGoals.map(g => format(startOfWeek(new Date(g.created_at)), 'yyyy-ww'));
-                const relevantAttempts = attempts.filter(a => weekStrings.includes(format(startOfWeek(new Date(a.created_at)), 'yyyy-ww')));
-                return relevantAttempts.length > 0 ? (relevantAttempts.filter(a => a.is_correct).length / relevantAttempts.length) * 100 : 0;
-            };
-            correlation = {
-                goodSleep: { performance: Math.round(getAvgAcc(goodSleepWeeks)), recovery: 92 },
-                poorSleep: { performance: Math.round(getAvgAcc(poorSleepWeeks)), recovery: 45 }
-            };
-        }
+        // --- CORREÇÃO 15 — calculateStreaks ---
+        const calculateStreaks = (errorsList: ExamError[], examsList: Exam[]) => {
+            const activeDays = new Set<string>();
+            errorsList.forEach(e => {
+                activeDays.add(format(new Date(e.created_at), 'yyyy-MM-dd'));
+            });
+            examsList.forEach(e => {
+                if (new Date(e.date) <= now) {
+                    activeDays.add(format(new Date(e.date), 'yyyy-MM-dd'));
+                }
+            });
 
-        // --- Difficult Subtopics (Problem 7) ---
-        const subtopicErrorCount: Record<string, { name: string; specialty: string; count: number }> = {};
-        errors.filter(e => e.error_origin === 'falta_contato').forEach(e => {
-            const key = `${e.specialty}-${e.subtopic}`;
-            if (!subtopicErrorCount[key]) {
-                subtopicErrorCount[key] = { name: e.subtopic, specialty: e.specialty, count: 0 };
+            const sortedDays = Array.from(activeDays).sort();
+            if (sortedDays.length === 0) return { current: 0, record: 0 };
+
+            let currentStreak = 0;
+            const todayStr = format(now, 'yyyy-MM-dd');
+            const yesterdayStr = format(subDays(now, 1), 'yyyy-MM-dd');
+
+            let checkDate = activeDays.has(todayStr) ? todayStr : yesterdayStr;
+
+            while (activeDays.has(checkDate)) {
+                currentStreak++;
+                checkDate = format(subDays(parseISO(checkDate), 1), 'yyyy-MM-dd');
             }
-            subtopicErrorCount[key].count++;
-        });
-        const difficultSubtopics = Object.values(subtopicErrorCount)
-            .filter(s => s.count >= 2)
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 5)
-            .map(s => ({ name: `${s.specialty} — ${s.name}`, mistakes: s.count }));
 
-        // --- Spaced Repetition ---
-        const dueCount = flashcards.filter(f => f.next_review && new Date(f.next_review) <= now).length;
-        const learningCount = flashcards.filter(f => f.repetition_level < 5 && f.repetition_level > 0).length;
-        const cardStatusData = [
-            { name: 'Atrasado', value: dueCount, color: '#EF4444' },
-            { name: 'Aprendendo', value: learningCount, color: '#F59E0B' },
-            { name: 'Dominado', value: consolidatedCards, color: '#10B981' },
-            { name: 'Pendente', value: flashcards.length - dueCount - learningCount - consolidatedCards, color: '#94A3B8' }
-        ];
+            let record = 0;
+            let tempStreak = 1;
+            for (let i = 1; i < sortedDays.length; i++) {
+                const prev = parseISO(sortedDays[i - 1]);
+                const curr = parseISO(sortedDays[i]);
+                const diff = Math.round((curr.getTime() - prev.getTime()) / 86400000);
 
-        // --- Error Origins ---
-        const origins = ['desatencao', 'falta_contato', 'cansaco'];
-        const errorOrigins = origins.map(o => {
-            const count = errors.filter(e => e.error_origin === o).length;
-            const percentage = errors.length > 0 ? (count / errors.length) * 100 : 33;
-            return { type: o as any, percentage: Math.round(percentage), trend: 'stable' as const };
-        });
+                if (diff === 1) {
+                    tempStreak++;
+                    record = Math.max(record, tempStreak);
+                } else {
+                    tempStreak = 1;
+                }
+            }
+            record = Math.max(record, currentStreak);
+            return { current: currentStreak, record };
+        };
 
-        // --- Phase Logic ---
-        const sortedExams = [...exams].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        const nextExam = sortedExams.find(e => new Date(e.date) > now);
-        let idealVolume = 100;
-        let monthsToExam = 7;
+        // --- CORREÇÃO 16 — calculateWeakestDay ---
+        const calculateWeakestDay = (errorsList: ExamError[], examsList: Exam[]) => {
+            const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+            const counts = new Array(7).fill(0);
+
+            errorsList.forEach(e => {
+                const day = new Date(e.created_at).getDay();
+                counts[day]++;
+            });
+            examsList.forEach(e => {
+                if (new Date(e.date) <= now) {
+                    const day = new Date(e.date).getDay();
+                    counts[day] += 3;
+                }
+            });
+
+            if (counts.every(c => c === 0)) return null;
+            const minCount = Math.min(...counts);
+            const weakestDayIndex = counts.indexOf(minCount);
+            return dayNames[weakestDayIndex];
+        };
+
+        // --- CORREÇÃO 14 — Fase sem prova cadastrada ---
+        const futureExams = exams.filter(e => new Date(e.date) > now);
+        const nextExam = futureExams.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+        let monthsToExam: number | null = null;
+        let idealVolume: number | null = null;
 
         if (nextExam) {
             const diffMs = new Date(nextExam.date).getTime() - now.getTime();
-            monthsToExam = diffMs / (1000 * 60 * 60 * 24 * 30.44);
-            if (monthsToExam < 3) idealVolume = 450;
-            else if (monthsToExam <= 6) idealVolume = 250;
+            monthsToExam = Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24 * 30.44)));
+            idealVolume = monthsToExam < 3 ? 450 : monthsToExam <= 6 ? 250 : 100;
         }
 
+        // --- Cálculos Finais do Hook ---
+        const topics = dashboard?.topics || [];
+        const isNewUser = errors.length === 0 && exams.length === 0 && goals.length === 0 && flashcards.length === 0;
+
+        const gapClosure = flashcards.length > 0 ? (flashcards.filter(f => (f.repetition_level || 0) >= 5).length / flashcards.length) * 100 : 100;
+        const goalConsistency = goals.filter(g => g.category === 'estudo').length > 0
+            ? (goals.filter(g => g.category === 'estudo' && (g.current_value / g.target_value) >= 0.7).length / goals.filter(g => g.category === 'estudo').length) * 100
+            : 0;
+        const healthBalance = goals.filter(g => g.category !== 'estudo').length > 0
+            ? (goals.filter(g => g.category !== 'estudo').reduce((acc, g) => acc + (g.current_value / g.target_value), 0) / goals.filter(g => g.category !== 'estudo').length) * 100
+            : 100;
+
+        const medFlowIndex = Math.min(100,
+            (gapClosure * 0.30) +
+            (calculateNonRecurrence(errors) * 0.25) +
+            (calculateSimConsistency(exams) * 0.20) +
+            (goalConsistency * 0.15) +
+            (healthBalance * 0.10)
+        );
+
+        const streaks = calculateStreaks(errors, exams);
+        const weakestDay = calculateWeakestDay(errors, exams);
+
         return {
+            isNewUser,
             index: Math.round(medFlowIndex),
             components: {
-                gapClosure: Math.round(c1),
-                nonRecurrence: Math.round(c2),
-                simConsistency: Math.round(c3),
-                goalConsistency: Math.round(c4),
-                healthBalance: Math.round(c5)
+                gapClosure: Math.round(gapClosure),
+                nonRecurrence: calculateNonRecurrence(errors),
+                simConsistency: calculateSimConsistency(exams),
+                goalConsistency: Math.round(goalConsistency),
+                healthBalance: Math.round(healthBalance)
             },
             charts: {
-                weeklyData,
-                specialtyData,
-                cardStatusData,
-                errorOrigins,
-                heatmapData,
-                activityData: dashboard?.effort.map(e => ({
-                    date: e.date,
-                    intensity: e.total_minutes > 120 ? 4 : e.total_minutes > 60 ? 3 : e.total_minutes > 0 ? 1 : 0
-                })) || [],
-                statusHistory,
-                correlation,
-                sustainability: Math.round((c4 * 0.50) + (healthRate * 30) + (exerciseRate * 20)),
-                monthsToExam: Math.round(monthsToExam),
+                weeklyData: generateWeeklyData(errors, goals),
+                specialtyData: generateSpecialtyData(topics, errors),
+                cardStatusData: generateCardStatusData(flashcards),
+                errorOrigins: generateErrorOrigins(errors),
+                positionData: generatePositionData(errors),
+                heatmapData: generateHeatmapData(errors),
+                activityData: generateActivityData(errors, exams),
+                statusHistory: generateStatusHistory(goals),
+                correlation: calculateCorrelation(goals, topics),
+                sustainability: calculateSustainability(goals),
+                monthsToExam,
                 idealVolume,
-                historySize: uniqueWeeksWithGoals.length,
-                advice: {
-                    revisionVsQuestions: (attempts.length > 0 && flashcards.filter(f => f.repetition_level > 0).length > 0) ?
-                        attempts.length > (flashcards.filter(f => f.repetition_level > 0).length * 2) : false
-                },
-                positionData: [
-                    { block: '1-25', count: errors.filter(e => e.posicao_questao === '1-25').length },
-                    { block: '26-50', count: errors.filter(e => e.posicao_questao === '26-50').length },
-                    { block: '51-75', count: errors.filter(e => e.posicao_questao === '51-75').length },
-                    { block: '76-100', count: errors.filter(e => e.posicao_questao === '76-100').length }
-                ]
+                currentStreak: streaks.current,
+                recordStreak: streaks.record,
+                weakestDay
             }
         };
     }, [loading, exams, errors, goals, flashcards, dashboard, attempts]);

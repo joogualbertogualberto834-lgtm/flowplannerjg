@@ -372,6 +372,24 @@ export const addExam = async (payload: { name: string; date: string; type: strin
     if (error) throw error;
 };
 
+export async function saveExam(data: {
+    name: string;
+    date: string;
+    type: 'simulado' | 'prova_integra';
+    specialties: string[];
+    notes: string | null;
+}): Promise<void> {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    const { error } = await supabase
+        .from('exams')
+        .insert({
+            ...data,
+            user_id: userId
+        });
+    if (error) throw new Error(error.message);
+}
+
 export const updateExam = async (id: number, payload: { name: string; date: string; type: string; notes?: string }) => {
     const { error } = await supabase.from('exams').update(payload).eq('id', id);
     if (error) throw error;
@@ -428,6 +446,26 @@ export const deleteExamError = async (id: number) => {
     const { error } = await supabase.from('exam_errors').delete().eq('id', id);
     if (error) throw error;
 };
+
+export async function saveExamError(data: {
+    specialty: string;
+    topic: string;
+    subtopic: string;
+    error_origin: 'desatencao' | 'falta_contato' | 'cansaco';
+    posicao_questao: '1-25' | '26-50' | '51-75' | '76-100' | null;
+    notes: string | null;
+    exam_id: number | null;
+}): Promise<void> {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    const { error } = await supabase
+        .from('exam_errors')
+        .insert({
+            ...data,
+            user_id: userId
+        });
+    if (error) throw new Error(error.message);
+}
 
 // ============================================================
 // Desempenho — Subtemas Difíceis

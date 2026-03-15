@@ -1,9 +1,10 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Target, TrendingUp, Calendar, CheckCircle2, Heart } from 'lucide-react';
+import { Target, TrendingUp, Calendar, CheckCircle2, Heart, ChevronRight } from 'lucide-react';
 
 interface MedFlowIndexProps {
     index: number;
+    isNewUser?: boolean;
     components: {
         gapClosure: number;
         nonRecurrence: number;
@@ -14,7 +15,7 @@ interface MedFlowIndexProps {
     historySize?: number;
 }
 
-export function MedFlowIndex({ index, components, historySize = 3 }: MedFlowIndexProps) {
+export function MedFlowIndex({ index, components, isNewUser, historySize = 3 }: MedFlowIndexProps) {
     const isReady = historySize >= 3;
 
     const getStatus = (val: number) => {
@@ -75,7 +76,14 @@ export function MedFlowIndex({ index, components, historySize = 3 }: MedFlowInde
                 </div>
 
                 <div className="flex-1 w-full">
-                    <h2 className="text-xl font-bold text-slate-800 mb-2">Índice MedFlow</h2>
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-xl font-bold text-slate-800">Índice MedFlow</h2>
+                        {isNewUser && (
+                            <span className="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                                Novo Usuário
+                            </span>
+                        )}
+                    </div>
                     <p className="text-sm text-slate-500 mb-8">Baseado no seu histórico de preparação atual.</p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -89,12 +97,12 @@ export function MedFlowIndex({ index, components, historySize = 3 }: MedFlowInde
                                 </div>
                                 <div className="flex items-end justify-between">
                                     <span className="text-xs font-semibold text-slate-600 line-clamp-1">{item.label}</span>
-                                    <span className="text-lg font-bold text-slate-800">{item.value}%</span>
+                                    <span className="text-lg font-bold text-slate-800">{isNewUser ? 0 : item.value}%</span>
                                 </div>
                                 <div className="mt-2 h-1 bg-slate-200 rounded-full overflow-hidden">
                                     <motion.div
                                         initial={{ width: 0 }}
-                                        animate={{ width: `${item.value}%` }}
+                                        animate={{ width: `${isNewUser ? 0 : item.value}%` }}
                                         transition={{ duration: 1, delay: 0.5 }}
                                         className={`h-full ${item.color.replace('text', 'bg')}`}
                                     />
@@ -105,33 +113,61 @@ export function MedFlowIndex({ index, components, historySize = 3 }: MedFlowInde
                 </div>
             </div>
 
-            <div className={`mt-8 p-4 rounded-2xl ${status.bg} border border-${status.color.split('-')[1]}-100 flex items-center justify-between`}>
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg bg-white ${status.color}`}>
-                        <TrendingUp size={16} />
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Ponto de melhoria</p>
-                        <p className={`text-sm font-bold ${status.color}`}>
-                            {items.sort((a, b) => a.value - b.value)[0].label} ({items.sort((a, b) => a.value - b.value)[0].value}%)
-                        </p>
-                    </div>
-                </div>
-                <button
-                    onClick={() => {
-                        const weakest = items.sort((a, b) => a.value - b.value)[0];
-                        const targetId = weakest.label === 'Fechamento de Lacunas' ? 'error-analysis-section' :
-                            weakest.label === 'Não Reincidência' ? 'spaced-repetition-section' :
-                                weakest.label === 'Consistência Simulados' ? 'questions-panel-section' :
-                                    weakest.label === 'Metas de Estudo' ? 'consistency-section' :
-                                        'plan-health-section';
-                        document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                    className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors uppercase tracking-widest"
+            {isNewUser ? (
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="mt-8 p-8 bg-slate-900 text-white rounded-[32px] overflow-hidden relative"
                 >
-                    Saber mais
-                </button>
-            </div>
+                    <div className="relative z-10">
+                        <h3 className="text-xl font-black mb-4">Por onde começar</h3>
+                        <ul className="space-y-3">
+                            {[
+                                'Cadastre sua prova no Calendário de Provas (aba Gerenciar)',
+                                'Registre erros após simulados (aba Caderno de Oportunidades)',
+                                'Crie metas semanais (aba Dashboard)',
+                                'Estude temas para gerar dados de aproveitamento'
+                            ].map((step, i) => (
+                                <li key={i} className="flex items-center gap-3 text-slate-400 text-sm">
+                                    <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-[10px] font-bold">
+                                        {i + 1}
+                                    </div>
+                                    {step}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-32 -mt-32" />
+                </motion.div>
+            ) : (
+                <div className={`mt-8 p-4 rounded-2xl ${status.bg} border border-${status.color.split('-')[1]}-100 flex items-center justify-between`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg bg-white ${status.color}`}>
+                            <TrendingUp size={16} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Ponto de melhoria</p>
+                            <p className={`text-sm font-bold ${status.color}`}>
+                                {items.sort((a, b) => a.value - b.value)[0].label} ({items.sort((a, b) => a.value - b.value)[0].value}%)
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const weakest = items.sort((a, b) => a.value - b.value)[0];
+                            const targetId = weakest.label === 'Fechamento de Lacunas' ? 'error-analysis-section' :
+                                weakest.label === 'Não Reincidência' ? 'spaced-repetition-section' :
+                                    weakest.label === 'Consistência Simulados' ? 'questions-panel-section' :
+                                        weakest.label === 'Metas de Estudo' ? 'consistency-section' :
+                                            'plan-health-section';
+                            document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors uppercase tracking-widest"
+                    >
+                        Saber mais
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

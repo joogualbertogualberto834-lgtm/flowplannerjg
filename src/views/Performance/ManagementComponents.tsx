@@ -29,6 +29,7 @@ export function ExamRow({ exam, onEdit, onDelete, onStartQuiz, onUpload }: {
     onDelete: (id: number) => void;
     onStartQuiz: (e: any) => void;
     onUpload: (id: number) => void;
+    key?: React.Key;
 }) {
     return (
         <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl group hover:border-blue-200 transition-all">
