@@ -23,23 +23,26 @@ export async function processQuestions(text: string): Promise<{ answer: string; 
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
-      contents: `Você é um especialista em educação médica. Sua tarefa é transformar o texto de um resumo médico, apostila ou questão em um conjunto de palavras cruzadas de alta qualidade.
+      model: "gemini-2.0-flash",
+      contents: `Você é um especialista em educação médica criando um jogo de palavras cruzadas.
       
-      Instruções:
-      1. Extraia os termos mais importantes (Patologias, Diagnósticos, Tratamentos, Sinais Clínicos).
-      2. Para cada termo, crie uma dica curta e desafiadora (clue). Prefira o estilo "complete a frase" ou descrições clínicas diretas que induzam ao termo técnico.
-      3. Exemplo de estilo: "Para tratamento de febre podemos usar dipirona no primeiro momento e ......" -> Resposta: PARACETAMOL.
-      4. Crie também uma 'dica médica' (hint) extremamente curta e sutil (ex: "Droga de 1ª linha", "Sinal patognomônico").
-      5. O 'answer' deve ser uma ÚNICA palavra técnica (sem espaços, sem acentos).
-      6. O 'clue' deve ser focado em Active Recall.
+      REGRAS OBRIGATÓRIAS para o campo 'answer':
+      - DEVE ser uma única palavra SEM espaços (ex: METFORMINA, PENICILINA, HEPATITE)
+      - PROIBIDO usar palavras compostas ou frases (ex: NÃO use "SINDROME METABOLICA", use "METABOLICA")
+      - Máximo de 12 letras
+      - Sem acentos, sem hífens, apenas letras A-Z
+      - Se um termo for composto, escolha apenas a palavra mais importante
+      
+      Para cada termo, crie:
+      1. Uma dica (clue) curta no estilo "complete a frase" ou descrição clínica direta
+      2. Uma pérola médica (hint) muito curta (ex: "Droga de 1ª linha", "Sinal patognomônico")
       
       Texto para processar:
       """
       ${text}
       """
       
-      Retorne um array JSON de objetos com 'answer', 'clue' e 'hint'. Gere entre 8 a 12 pares se o texto permitir.`,
+      Retorne um array JSON com 8 a 12 objetos {'answer', 'clue', 'hint'}. O 'answer' deve seguir TODAS as regras acima.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -99,14 +102,21 @@ export async function generateRandomCrossword(topic: string): Promise<{ answer: 
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
-      contents: `Gere 10 dicas de palavras cruzadas sobre o tema médico: ${topic}. 
-      Foque em conteúdo de alto rendimento para exames de residência (Revalida, PSU, etc.).
+      model: "gemini-2.0-flash",
+      contents: `Crie um jogo de palavras cruzadas médicas sobre o tema: ${topic}.
+      Foque em conteúdo de alto rendimento para Revalida, PSU e provas de residência.
       
-      Retorne um array JSON de objetos com as propriedades 'answer', 'clue' e 'hint'.
-      O 'answer' deve ser uma única palavra (sem espaços, sem acentos).
-      O 'clue' deve ser uma descrição clínica curta ou uma frase do tipo "complete a lacuna" (ex: "O tratamento de primeira linha para X é ...").
-      O 'hint' é uma "pérola médica" muito curta ou uma dica sutil.`,
+      REGRAS OBRIGATÓRIAS para o campo 'answer':
+      - Uma ÚNICA palavra, SEM espaços (ex: METFORMINA, PENICILINA, HEPATITE, APENDICITE)
+      - PROIBIDO palavras compostas (NÃO use "SINDROME X", use apenas "METFORMINA")
+      - Máximo de 12 letras
+      - Sem acentos, sem hífens, apenas letras A-Z
+      - Se um conceito for composto, escolha a palavra técnica mais específica
+      
+      O 'clue' deve ser do tipo: "O tratamento de 1ª linha para X é ..." ou uma descrição clínica curta.
+      O 'hint' é uma pérola médica muito curta (ex: "Droga de 1ª linha", "Critério diagnóstico").
+      
+      Gere 10 pares no formato JSON [{answer, clue, hint}]. O 'answer' DEVE seguir todas as regras acima.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -164,7 +174,7 @@ export async function extractQuestionsFromPDF(pdfBase64: string, specialty: stri
     `;
 
     const result = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-2.0-flash",
       contents: [
         {
           role: "user",
@@ -189,5 +199,70 @@ export async function extractQuestionsFromPDF(pdfBase64: string, specialty: stri
   } catch (error: any) {
     console.error("Erro na extração via SDK:", error);
     throw new Error(error.message || "Erro ao processar PDF com a IA.");
+  }
+}
+
+export async function processRawTextQuestions(text: string): Promise<any[]> {
+  const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_AI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Chave do Gemini não encontrada no .env (VITE_GEMINI_API_KEY).");
+  }
+
+  console.log(`[processRawTextQuestions] Sending text to Gemini (length: ${text.length})`);
+  // console.log(`[processRawTextQuestions] Raw text:`, text); // Para debug se necessário
+
+  try {
+    const prompt = `
+      Você é um motor de parsing de exames médicos de alto desempenho. Sua tarefa é converter texto bruto de qualquer prova de residência médica em um JSON estruturado.
+      
+      REGRAS:
+      1. Identifique o enunciado, as alternativas (A, B, C, D ou E), o gabarito correto e o tema clínico (ex: Infectologia, Pediatria, etc).
+      2. Se a instituição não for mencionada, classifique apenas pelo tema.
+      3. O retorno deve ser EXCLUSIVAMENTE um array de objetos JSON dentro de um campo "questions".
+      4. Seja resiliente a quebras de linha e caracteres especiais vindos de cópia de PDF.
+      
+      PROMPT DE ENTRADA:
+      """
+      ${text}
+      """
+
+      Retorne APENAS o JSON no formato:
+      {
+        "questions": [
+          {
+            "question_text": "...",
+            "option_a": "...",
+            "option_b": "...",
+            "option_c": "...",
+            "option_d": "...",
+            "option_e": "...",
+            "correct_option": "A",
+            "specialty": "...",
+            "subtopic": "...",
+            "explanation": "..."
+          }
+        ]
+      }
+    `;
+
+    const result = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }]
+        }
+      ],
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const data = JSON.parse(result.text || "{}");
+    console.log(`[processRawTextQuestions] Successfully parsed ${data.questions?.length || 0} questions.`);
+    return data.questions || [];
+  } catch (error: any) {
+    console.error("Erro no processamento de texto via SDK:", error);
+    throw new Error(error.message || "Erro ao processar o texto com a IA.");
   }
 }

@@ -11,6 +11,10 @@ import { WeeklyView } from './views/WeeklyView';
 import { CrosswordView } from './views/CrosswordView';
 import { PerformanceView } from './views/PerformanceView';
 import { useData } from './hooks/useData';
+import { ResetModal } from './components/ResetModal';
+import { TutorialModal } from './components/TutorialModal';
+import { resetAllUserData } from './services/api';
+import { useEffect } from 'react';
 
 type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword' | 'performance';
 
@@ -21,6 +25,8 @@ import { Loader2 } from 'lucide-react';
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const { user, loading: authLoading } = useAuth();
   const {
     topics,
@@ -33,6 +39,12 @@ export default function App() {
     groupedTopics,
     refresh,
   } = useData();
+
+  useEffect(() => {
+    if (!localStorage.getItem('medflow_tutorial_seen')) {
+      setShowTutorial(true);
+    }
+  }, []);
 
   if (authLoading) {
     return (
@@ -105,6 +117,8 @@ export default function App() {
           loading={dataLoading}
           onRefresh={refresh}
           onMenuClick={() => setIsMenuOpen(!isMenuOpen)}
+          onShowReset={() => setShowReset(true)}
+          onShowTutorial={() => setShowTutorial(true)}
         />
 
         <AnimatePresence mode="wait">
@@ -119,6 +133,23 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <TutorialModal
+        isOpen={showTutorial}
+        onClose={() => setShowTutorial(false)}
+      />
+
+      <ResetModal
+        isOpen={showReset}
+        onClose={() => setShowReset(false)}
+        onConfirm={async () => {
+          await resetAllUserData();
+          await refresh();
+          setShowReset(false);
+          localStorage.removeItem('medflow_tutorial_seen');
+          setShowTutorial(true);
+        }}
+      />
     </div>
   );
 }

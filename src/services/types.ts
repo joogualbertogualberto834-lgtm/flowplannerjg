@@ -71,6 +71,7 @@ export interface ExamError {
   topic_id: number | null;
   subtopic: string;
   error_origin: ErrorOrigin;
+  posicao_questao: '1-25' | '26-50' | '51-75' | '76-100' | null;
   notes: string | null;
   created_at: string;
 }

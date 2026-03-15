@@ -395,6 +395,23 @@ export const fetchExamErrors = async () => {
     return (data || []).map((e: any) => ({ ...e, exam_name: e.exams?.name ?? null })) as any[];
 };
 
+export const fetchAllExamAttempts = async () => {
+    const { data, error } = await supabase
+        .from('exam_attempts')
+        .select('*, exam_questions(specialty, subtopic)');
+    if (error) throw error;
+    return (data || []) as any[];
+};
+
+export const fetchWeeklyAttempts = async () => {
+    const { data, error } = await supabase
+        .from('exam_attempts')
+        .select('created_at, is_correct')
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []) as any[];
+};
+
 export const addExamError = async (payload: {
     exam_id?: number | null;
     specialty: string;
@@ -535,4 +552,30 @@ export const fetchExamAttempts = async (examId: number) => {
 };
 
 // (Edge Function call removed in favor of direct client-side extraction in geminiService.ts)
+// ============================================================
+// Reset de Dados
+// ============================================================
 
+export async function resetAllUserData(): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Não autenticado');
+
+    const tables = [
+        'exam_errors',
+        'exams',
+        'difficult_subtopics',
+        'personal_goals',
+        'flashcards',
+        'exam_attempts',
+        'study_log',
+        'user_progress'
+    ];
+
+    for (const table of tables) {
+        const { error } = await supabase
+            .from(table)
+            .delete()
+            .eq('user_id', user.id);
+        if (error) throw new Error(`Erro ao apagar ${table}: ${error.message}`);
+    }
+}
