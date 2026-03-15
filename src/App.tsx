@@ -16,6 +16,7 @@ import { TutorialModal } from './components/TutorialModal';
 import { resetAllUserData } from './services/api';
 import { useEffect } from 'react';
 import { SetupWizard } from './components/SetupWizard';
+import { MentorGuide } from './components/MentorGuide';
 
 type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword' | 'performance';
 
@@ -152,6 +153,8 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <MentorGuide activeTab={activeTab} />
 
       <TutorialModal
         isOpen={showTutorial}
