@@ -94,6 +94,22 @@ export function TopicsView({ groupedTopics, onUpdate }: TopicsViewProps) {
 
     return (
         <div className="max-w-4xl mx-auto space-y-4">
+            <div className="mb-6 p-3 bg-slate-50
+  rounded-xl border border-slate-100
+  flex items-center gap-3">
+                <span className="text-sm">📚</span>
+                <p className="text-xs text-slate-500
+    leading-snug">
+                    <span className="font-bold
+      text-slate-700">
+                        Especialidades:
+                    </span>
+                    {' '}Após estudar um tema, clique
+                    nele e registre sua performance
+                    (0–100%). O sistema agenda a
+                    próxima revisão automaticamente.
+                </p>
+            </div>
             {Object.entries(groupedTopics).map(([specialty, topics]) => (
                 <div
                     key={specialty}

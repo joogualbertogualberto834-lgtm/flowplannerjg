@@ -94,6 +94,24 @@ export function ErrorsView({ errors, onUpdate }: ErrorsViewProps) {
 
     return (
         <div className="max-w-6xl mx-auto space-y-8 pb-24 px-4">
+            <div className="mb-6 p-3 bg-slate-50
+  rounded-xl border border-slate-100
+  flex items-center gap-3">
+                <span className="text-sm">📝</span>
+                <p className="text-xs text-slate-500
+    leading-snug">
+                    <span className="font-bold
+      text-slate-700">
+                        Caderno de Erros:
+                    </span>
+                    {' '}Registre cada questão errada
+                    com especialidade, tema e origem
+                    (Desatenção, Falta de Contato
+                    ou Cansaço). Erros de Falta de
+                    Contato viram flashcards
+                    automaticamente.
+                </p>
+            </div>
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                 <div>

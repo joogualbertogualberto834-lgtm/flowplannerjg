@@ -64,6 +64,15 @@ export function DashboardView({ data, topics, onUpdate }: DashboardViewProps) {
         ? differenceInDays(new Date(nextExam.date), new Date())
         : null;
 
+    // Lógica da Fase de Preparação
+    const prepPhase = (() => {
+        if (daysToExam === null) return null;
+        if (daysToExam > 180) return { name: 'Base (Consolidação)', ideal: '100-150', color: 'text-emerald-500', tip: 'Foque em construir uma base sólida nos temas de alta incidência.' };
+        if (daysToExam > 90) return { name: 'Aprofundamento', ideal: '150-250', color: 'text-blue-500', tip: 'Hora de aumentar o volume e focar nos detalhes que diferenciam os aprovados.' };
+        if (daysToExam > 30) return { name: 'Intensificação', ideal: '250-400', color: 'text-amber-500', tip: 'Foco total em questões e simulados. Identifique suas lacunas rapidamente.' };
+        return { name: 'Reta Final', ideal: '400+', color: 'text-rose-500', tip: 'Revisão ultra-rápida e controle emocional. Você está quase lá!' };
+    })();
+
     // Flashcards vencidos hoje
     const overdueFlashcards = flashcards.filter(f =>
         f.next_review &&
@@ -88,61 +97,273 @@ export function DashboardView({ data, topics, onUpdate }: DashboardViewProps) {
         differenceInDays(new Date(), new Date(e.created_at)) <= 1
     ).length;
 
-    // Nível de urgência do mentor
-    const urgencyLevel = (() => {
-        if (daysToExam !== null && daysToExam <= 2) return 'critical';
-        if (overdueFlashcards > 10 || overdueTopics > 5) return 'high';
-        if (daysToExam !== null && daysToExam <= 7) return 'medium';
-        return 'normal';
+    const dayContext = (() => {
+        // PROVA HOJE
+        if (daysToExam === 0) return {
+            type: 'exam_day',
+            emoji: '🎯',
+            title: 'Dia de prova',
+            subtitle: nextExam?.name || '',
+            color: 'bg-blue-50 border-blue-200',
+            badge: 'bg-blue-100 text-blue-700',
+            badgeText: 'Hoje é o dia'
+        };
+
+        // PROVA AMANHÃ
+        if (daysToExam === 1) return {
+            type: 'exam_tomorrow',
+            emoji: '📋',
+            title: 'Prova amanhã',
+            subtitle: nextExam?.name || '',
+            color: 'bg-amber-50 border-amber-200',
+            badge: 'bg-amber-100 text-amber-700',
+            badgeText: 'Prepare-se hoje'
+        };
+
+        // ERROS RECENTES PARA REGISTRAR
+        if (recentErrors > 0) return {
+            type: 'post_exam',
+            emoji: '📝',
+            title: 'Registre seus erros',
+            subtitle: `${recentErrors} erro${recentErrors > 1 ? 's' : ''} das últimas 24h`,
+            color: 'bg-rose-50 border-rose-200',
+            badge: 'bg-rose-100 text-rose-700',
+            badgeText: 'Feche o ciclo'
+        };
+
+        // FLASHCARDS URGENTES
+        if (overdueFlashcards > 5) return {
+            type: 'review_urgent',
+            emoji: '🔄',
+            title: 'Revisões aguardando',
+            subtitle: `${overdueFlashcards} flashcards vencidos`,
+            color: 'bg-orange-50 border-orange-200',
+            badge: 'bg-orange-100 text-orange-700',
+            badgeText: 'Prioridade hoje'
+        };
+
+        // PROVA EM BREVE
+        if (daysToExam !== null && daysToExam <= 7)
+            return {
+                type: 'exam_soon',
+                emoji: '📅',
+                title: `Prova em ${daysToExam} dias`,
+                subtitle: nextExam?.name || '',
+                color: 'bg-violet-50 border-violet-200',
+                badge: 'bg-violet-100 text-violet-700',
+                badgeText: 'Foque na revisão'
+            };
+
+        // DIA NORMAL
+        return {
+            type: 'study_day',
+            emoji: '📚',
+            title: 'Bom dia de estudos',
+            subtitle: 'Siga o plano abaixo',
+            color: 'bg-emerald-50 border-emerald-200',
+            badge: 'bg-emerald-100 text-emerald-700',
+            badgeText: 'No ritmo'
+        };
     })();
 
-    // Lista de ações do dia (máximo 3)
     const todayActions = (() => {
-        const actions = [];
+        // DIA DE PROVA
+        if (dayContext.type === 'exam_day') {
+            return [
+                {
+                    n: 1, icon: '☕',
+                    text: 'Relaxe e se prepare',
+                    detail: 'Não estude conteúdo novo hoje — confie no que já estudou',
+                    time: null, tab: null
+                },
+                {
+                    n: 2, icon: '🎯',
+                    text: 'Faça a prova com calma',
+                    detail: nextExam?.name || 'Leia cada questão com atenção',
+                    time: null, tab: null
+                },
+                {
+                    n: 3, icon: '📝',
+                    text: 'Após a prova: registre os erros',
+                    detail: 'Vá ao Caderno de Erros e categorize cada questão errada',
+                    time: '~15 min', tab: 'errors'
+                }
+            ];
+        }
 
-        if (overdueFlashcards > 0) {
-            actions.push({
-                priority: overdueFlashcards > 5 ? 'high' : 'medium',
-                icon: 'flashcard',
-                text: `${overdueFlashcards} flashcard${overdueFlashcards > 1 ? 's' : ''} vencido${overdueFlashcards > 1 ? 's' : ''} para revisar`,
-                detail: 'Revisão espaçada — prioridade máxima',
+        // PROVA AMANHÃ
+        if (dayContext.type === 'exam_tomorrow') {
+            const a: any[] = [];
+            if (overdueFlashcards > 0) a.push({
+                n: 1, icon: '🔄',
+                text: `Revise ${overdueFlashcards} flashcard${overdueFlashcards > 1 ? 's' : ''} vencido${overdueFlashcards > 1 ? 's' : ''}`,
+                detail: 'Clique em Flashcards → revise cada card',
+                time: `~${Math.ceil(overdueFlashcards * 1.5)} min`,
                 tab: 'flashcards'
             });
-        }
-
-        if (overdueTopics > 0) {
-            actions.push({
-                priority: overdueTopics > 3 ? 'high' : 'medium',
-                icon: 'review',
-                text: `${overdueTopics} tema${overdueTopics > 1 ? 's' : ''} com revisão atrasada`,
-                detail: 'Conteúdo em risco de ser esquecido',
+            if (overdueTopics > 0) a.push({
+                n: a.length + 1, icon: '📖',
+                text: `Revise ${overdueTopics} tema${overdueTopics > 1 ? 's' : ''} atrasado${overdueTopics > 1 ? 's' : ''}`,
+                detail: 'Clique em Revisões → complete cada card',
+                time: `~${overdueTopics * 5} min`,
                 tab: 'reviews'
             });
+            a.push({
+                n: a.length + 1, icon: '😴',
+                text: 'Durma cedo hoje',
+                detail: 'Sono adequado melhora seu desempenho em até 12 pontos',
+                time: null, tab: null
+            });
+            return a.slice(0, 3);
         }
 
-        if (dailyTarget && dailyTarget > 0) {
-            actions.push({
-                priority: 'normal',
-                icon: 'study',
+        // PÓS PROVA
+        if (dayContext.type === 'post_exam') {
+            const a: any[] = [{
+                n: 1, icon: '📝',
+                text: 'Registre os erros do simulado',
+                detail: `Clique em Caderno de Erros → categorize cada erro (Desatenção, Falta de Contato ou Cansaço)`,
+                time: `~${recentErrors * 2} min`,
+                tab: 'errors'
+            }];
+            if (overdueFlashcards > 0) a.push({
+                n: 2, icon: '🔄',
+                text: `Revise ${overdueFlashcards} flashcard${overdueFlashcards > 1 ? 's' : ''} vencido${overdueFlashcards > 1 ? 's' : ''}`,
+                detail: 'Clique em Flashcards → revise cada card',
+                time: `~${Math.ceil(overdueFlashcards * 1.5)} min`,
+                tab: 'flashcards'
+            });
+            if (dailyTarget) a.push({
+                n: a.length + 1, icon: '✏️',
                 text: `Meta de hoje: ${dailyTarget} questões`,
                 detail: studyGoal
                     ? `${studyGoal.current_value} de ${studyGoal.target_value} feitas esta semana`
-                    : '',
-                tab: 'errors'
-            });
-        }
-
-        if (actions.length === 0) {
-            actions.push({
-                priority: 'normal',
-                icon: 'start',
-                text: 'Configure suas metas para começar',
-                detail: 'Metas de estudo, saúde e exercício',
+                    : 'Registre nas Metas Pessoais',
+                time: `~${dailyTarget * 2} min`,
                 tab: 'performance'
             });
+            return a.slice(0, 3);
         }
 
-        return actions.slice(0, 3);
+        // REVISÕES URGENTES
+        if (dayContext.type === 'review_urgent') {
+            const a: any[] = [{
+                n: 1, icon: '🔄',
+                text: `Revise os ${overdueFlashcards} flashcards vencidos`,
+                detail: 'Clique em Flashcards → faça todos antes de novos estudos',
+                time: `~${Math.ceil(overdueFlashcards * 1.5)} min`,
+                tab: 'flashcards'
+            }];
+            if (overdueTopics > 0) a.push({
+                n: 2, icon: '📖',
+                text: `Revise ${overdueTopics} tema${overdueTopics > 1 ? 's' : ''} atrasado${overdueTopics > 1 ? 's' : ''}`,
+                detail: 'Clique em Revisões → complete cada card',
+                time: `~${overdueTopics * 5} min`,
+                tab: 'reviews'
+            });
+            if (dailyTarget) a.push({
+                n: a.length + 1, icon: '✏️',
+                text: `Depois: ${dailyTarget} questões`,
+                detail: studyGoal
+                    ? `${studyGoal.current_value} de ${studyGoal.target_value} esta semana`
+                    : '',
+                time: `~${dailyTarget * 2} min`,
+                tab: 'performance'
+            });
+            return a.slice(0, 3);
+        }
+
+        // PROVA EM BREVE
+        if (dayContext.type === 'exam_soon') {
+            const a: any[] = [];
+            if (overdueFlashcards > 0) a.push({
+                n: 1, icon: '🔄',
+                text: `Revise ${overdueFlashcards} flashcard${overdueFlashcards > 1 ? 's' : ''} vencido${overdueFlashcards > 1 ? 's' : ''}`,
+                detail: 'Clique em Flashcards → faça primeiro',
+                time: `~${Math.ceil(overdueFlashcards * 1.5)} min`,
+                tab: 'flashcards'
+            });
+            if (overdueTopics > 0) a.push({
+                n: a.length + 1, icon: '📖',
+                text: `Revise ${overdueTopics} tema${overdueTopics > 1 ? 's' : ''} atrasado${overdueTopics > 1 ? 's' : ''}`,
+                detail: 'Clique em Revisões',
+                time: `~${overdueTopics * 5} min`,
+                tab: 'reviews'
+            });
+            if (dailyTarget) a.push({
+                n: a.length + 1, icon: '✏️',
+                text: `${dailyTarget} questões hoje`,
+                detail: studyGoal
+                    ? `${studyGoal.current_value} de ${studyGoal.target_value} esta semana`
+                    : '',
+                time: `~${dailyTarget * 2} min`,
+                tab: 'performance'
+            });
+            if (a.length === 0) a.push({
+                n: 1, icon: '✅',
+                text: 'Tudo em dia — continue assim',
+                detail: `Prova em ${daysToExam} dias`,
+                time: null, tab: null
+            });
+            return a.slice(0, 3);
+        }
+
+        // DIA NORMAL
+        const a: any[] = [];
+        if (overdueFlashcards > 0) a.push({
+            n: 1, icon: '🔄',
+            text: `Revise ${overdueFlashcards} flashcard${overdueFlashcards > 1 ? 's' : ''} vencido${overdueFlashcards > 1 ? 's' : ''}`,
+            detail: 'Clique em Flashcards → faça antes das questões',
+            time: `~${Math.ceil(overdueFlashcards * 1.5)} min`,
+            tab: 'flashcards'
+        });
+        if (overdueTopics > 0) a.push({
+            n: a.length + 1, icon: '📖',
+            text: `Revise ${overdueTopics} tema${overdueTopics > 1 ? 's' : ''} com revisão vencida`,
+            detail: 'Clique em Revisões → complete cada card',
+            time: `~${overdueTopics * 5} min`,
+            tab: 'reviews'
+        });
+        if (dailyTarget) a.push({
+            n: a.length + 1, icon: '✏️',
+            text: `Meta de hoje: ${dailyTarget} questões`,
+            detail: studyGoal
+                ? `${studyGoal.current_value} de ${studyGoal.target_value} feitas esta semana — registre nas Metas`
+                : 'Configure uma meta em Desempenho → Metas Pessoais',
+            time: `~${dailyTarget * 2} min`,
+            tab: studyGoal ? 'performance' : 'performance'
+        });
+        if (a.length === 0) a.push({
+            n: 1, icon: '🎯',
+            text: 'Configure suas metas para começar',
+            detail: 'Clique em Desempenho → Metas Pessoais → crie uma meta de estudo',
+            time: '~5 min',
+            tab: 'performance'
+        });
+        return a.slice(0, 3);
+    })();
+
+    const dailySummary = (() => {
+        const parts: string[] = [];
+        if (overdueFlashcards > 0)
+            parts.push(`${overdueFlashcards} flashcard${overdueFlashcards > 1 ? 's' : ''} vencido${overdueFlashcards > 1 ? 's' : ''}`);
+        if (overdueTopics > 0)
+            parts.push(`${overdueTopics} tema${overdueTopics > 1 ? 's' : ''} atrasado${overdueTopics > 1 ? 's' : ''}`);
+        if (studyGoal) {
+            const pct = Math.round(
+                (studyGoal.current_value /
+                    studyGoal.target_value) * 100
+            );
+            parts.push(`${pct}% da meta semanal`);
+        }
+        if (parts.length === 0)
+            return 'Comece registrando um tema estudado ou uma sessão de questões.';
+
+        let summary = parts.join(' · ');
+        if (prepPhase) {
+            summary += ` · ${prepPhase.tip}`;
+        }
+        return summary;
     })();
 
     const projections = topics
@@ -174,11 +395,13 @@ export function DashboardView({ data, topics, onUpdate }: DashboardViewProps) {
         <div className="space-y-6">
             {!mentorLoading && (
                 <MentorCard
-                    urgencyLevel={urgencyLevel}
+                    dayContext={dayContext}
                     nextExam={nextExam}
                     daysToExam={daysToExam}
                     actions={todayActions}
                     recentErrors={recentErrors}
+                    dailySummary={dailySummary}
+                    prepPhase={prepPhase}
                 />
             )}
 
@@ -291,140 +514,229 @@ export function DashboardView({ data, topics, onUpdate }: DashboardViewProps) {
 }
 
 function MentorCard({
-    urgencyLevel,
+    dayContext,
     nextExam,
     daysToExam,
     actions,
-    recentErrors
+    recentErrors,
+    dailySummary,
+    prepPhase
 }: any) {
 
     const navigate = (tab: string) => {
+        if (!tab) return;
         window.dispatchEvent(
-            new CustomEvent('navigate', { detail: tab })
+            new CustomEvent('navigate',
+                { detail: tab })
         );
     };
 
-    const urgencyConfig: any = {
-        critical: {
-            bg: 'bg-red-50',
-            border: 'border-red-200',
-            badge: 'bg-red-100 text-red-700',
-            text: 'Atenção máxima necessária'
-        },
-        high: {
-            bg: 'bg-orange-50',
-            border: 'border-orange-200',
-            badge: 'bg-orange-100 text-orange-700',
-            text: 'Algumas pendências urgentes'
-        },
-        medium: {
-            bg: 'bg-amber-50',
-            border: 'border-amber-200',
-            badge: 'bg-amber-100 text-amber-700',
-            text: 'Prova se aproximando'
-        },
-        normal: {
-            bg: 'bg-emerald-50',
-            border: 'border-emerald-200',
-            badge: 'bg-emerald-100 text-emerald-700',
-            text: 'Tudo em dia'
-        }
-    };
-
-    const config = urgencyConfig[urgencyLevel];
-
-    const actionIconConfig: any = {
-        flashcard: { color: 'bg-blue-100 text-blue-600', label: '📚' },
-        review: { color: 'bg-amber-100 text-amber-600', label: '🔄' },
-        study: { color: 'bg-emerald-100 text-emerald-600', label: '✏️' },
-        start: { color: 'bg-slate-100 text-slate-600', label: '🎯' }
-    };
-
     return (
-        <div className={`rounded-2xl border p-6 ${config.bg} ${config.border} space-y-4 mb-2`}>
-            {/* Header do mentor */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-lg font-bold text-slate-800">
-                        Seu dia hoje
-                    </h2>
-                    <p className="text-sm text-slate-500">
-                        {new Date().toLocaleDateString('pt-BR', {
-                            weekday: 'long',
-                            day: 'numeric',
-                            month: 'long'
-                        })}
-                    </p>
+        <div className={`rounded-2xl border-2
+      p-6 space-y-5 mb-6
+      ${dayContext.color}`}>
+
+            {/* CABEÇALHO */}
+            <div className="flex items-start
+        justify-between gap-4">
+                <div className="flex items-center
+          gap-3">
+                    <span className="text-3xl
+            leading-none">
+                        {dayContext.emoji}
+                    </span>
+                    <div>
+                        <h2 className="text-xl
+              font-black text-slate-800
+              leading-tight">
+                            {dayContext.title}
+                        </h2>
+                        <p className="text-sm
+              text-slate-500 mt-0.5">
+                            {dayContext.subtitle ||
+                                new Date().toLocaleDateString(
+                                    'pt-BR', {
+                                    weekday: 'long',
+                                    day: 'numeric',
+                                    month: 'long'
+                                }
+                                )
+                            }
+                        </p>
+                    </div>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${config.badge}`}>
-                    {config.text}
+                <span className={`px-3 py-1.5
+          rounded-full text-xs font-bold
+          whitespace-nowrap flex-shrink-0
+          mt-1 ${dayContext.badge}`}>
+                    {dayContext.badgeText}
                 </span>
             </div>
 
-            {/* Próxima prova */}
-            {nextExam && daysToExam !== null && (
-                <div className="flex items-center gap-3 p-3 bg-white/70 rounded-xl border border-white">
-                    <div className="text-center min-w-[48px]">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">prova em</p>
-                        <p className={`text-2xl font-black ${daysToExam <= 2 ? 'text-red-600' : daysToExam <= 7 ? 'text-orange-500' : 'text-slate-700'}`}>
-                            {daysToExam}
-                        </p>
-                        <p className="text-[10px] text-slate-400">dias</p>
-                    </div>
-                    <div className="h-8 w-px bg-slate-200" />
-                    <div>
-                        <p className="text-sm font-bold text-slate-800">
-                            {nextExam.name}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                            {new Date(nextExam.date).toLocaleDateString('pt-BR')}
-                        </p>
-                    </div>
-                </div>
-            )}
-
-            {/* Ações do dia */}
-            <div className="space-y-2">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    O que fazer agora
-                </p>
-                {actions.map((action: any, idx: number) => (
-                    <button
-                        key={idx}
-                        onClick={() => navigate(action.tab)}
-                        className="w-full flex items-center gap-3 p-3 bg-white/80 hover:bg-white rounded-xl border border-white/50 hover:border-slate-200 transition-all text-left group"
-                    >
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${actionIconConfig[action.icon]?.color || 'bg-slate-100 text-slate-600'}`}>
-                            {actionIconConfig[action.icon]?.label}
+            {/* D-DAY — só quando não é hoje */}
+            {nextExam && daysToExam !== null
+                && daysToExam > 0 && (
+                    <div className="flex items-center
+          gap-4 p-4 bg-white/70 rounded-xl
+          border border-white">
+                        <div className="text-center
+            min-w-[56px]">
+                            <p className="text-[10px]
+              font-bold text-slate-400
+              uppercase leading-none mb-1">
+                                faltam
+                            </p>
+                            <p className={`text-4xl
+              font-black leading-none
+              ${daysToExam <= 2
+                                    ? 'text-red-600'
+                                    : daysToExam <= 7
+                                        ? 'text-orange-500'
+                                        : 'text-slate-700'}`}>
+                                {daysToExam}
+                            </p>
+                            <p className="text-[10px]
+              text-slate-400 leading-none
+              mt-1">
+                                {daysToExam === 1
+                                    ? 'dia' : 'dias'}
+                            </p>
                         </div>
+                        <div className="h-12 w-px bg-slate-200 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-slate-800 leading-tight">
+                            <p className="text-sm font-bold text-slate-800 leading-tight truncate">
+                                {nextExam.name}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <p className="text-[10px] font-black uppercase text-slate-400">Fase:</p>
+                                <p className={`text-[10px] font-black uppercase ${prepPhase?.color || 'text-slate-500'}`}>
+                                    {prepPhase?.name || 'Planejamento'}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="h-12 w-px bg-slate-200 flex-shrink-0" />
+                        <div className="text-right">
+                            <p className="text-[9px] font-black text-slate-400 uppercase leading-none mb-1">Ideal Semanal</p>
+                            <p className="text-lg font-black text-slate-700 leading-none">{prepPhase?.ideal || '--'}</p>
+                            <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">questões</p>
+                        </div>
+                    </div >
+                )
+            }
+
+            {/* AÇÕES NUMERADAS */}
+            <div className="space-y-2">
+                <p className="text-[10px] font-black
+          text-slate-400 uppercase
+          tracking-widest">
+                    O que fazer agora — nessa ordem
+                </p>
+
+                {actions.map((action: any) => (
+                    <div
+                        key={action.n}
+                        onClick={() =>
+                            action.tab &&
+                            navigate(action.tab)}
+                        className={`flex items-center
+              gap-3 p-3.5 rounded-xl
+              border transition-all
+              ${action.tab
+                                ? 'bg-white/80 border-white hover:bg-white hover:border-slate-200 hover:shadow-sm cursor-pointer active:scale-[0.99]'
+                                : 'bg-white/40 border-white/50 cursor-default'
+                            }`}
+                    >
+                        {/* Número em círculo */}
+                        <div className="w-8 h-8
+              rounded-full bg-slate-800
+              text-white flex items-center
+              justify-center text-sm
+              font-black flex-shrink-0
+              shadow-sm">
+                            {action.n}
+                        </div>
+
+                        {/* Ícone */}
+                        <span className="text-xl
+              flex-shrink-0 leading-none">
+                            {action.icon}
+                        </span>
+
+                        {/* Texto */}
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm
+                font-bold text-slate-800
+                leading-tight">
                                 {action.text}
                             </p>
-                            {action.detail && (
-                                <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
-                                    {action.detail}
-                                </p>
+                            <p className="text-[11px]
+                text-slate-500 mt-0.5
+                leading-snug">
+                                {action.detail}
+                            </p>
+                        </div>
+
+                        {/* Tempo + seta */}
+                        <div className="flex items-center
+              gap-2 flex-shrink-0">
+                            {action.time && (
+                                <span className="text-[10px]
+                  font-bold text-slate-400
+                  bg-slate-100 px-2 py-1
+                  rounded-lg whitespace-nowrap">
+                                    {action.time}
+                                </span>
+                            )}
+                            {action.tab && (
+                                <span className="text-slate-400
+                  font-bold text-sm">
+                                    →
+                                </span>
                             )}
                         </div>
-                        <span className="text-slate-300 group-hover:text-slate-500 transition-colors text-xs">
-                            →
-                        </span>
-                    </button>
+                    </div>
                 ))}
             </div>
 
-            {/* Alerta se teve erros recentes */}
-            {recentErrors > 0 && (
-                <div className="flex items-center gap-2 p-3 bg-white/60 rounded-xl border border-white">
-                    <span className="text-xs">⚡</span>
-                    <p className="text-xs text-slate-600">
-                        <span className="font-bold">
-                            {recentErrors} erro{recentErrors > 1 ? 's' : ''}
-                        </span> registrado{recentErrors > 1 ? 's' : ''} nas últimas 24h — flashcards foram criados automaticamente.
-                    </p>
-                </div>
-            )}
-        </div>
+            {/* RESUMO DO DIA */}
+            <div className="pt-1 border-t
+        border-black/5">
+                <p className="text-[11px]
+          text-slate-400 leading-relaxed">
+                    <span className="font-bold
+            text-slate-500">Hoje: </span>
+                    {dailySummary}
+                </p>
+            </div>
+
+            {/* AVISO DE ERROS RECENTES */}
+            {
+                recentErrors > 0 &&
+                dayContext.type !== 'post_exam' &&
+                dayContext.type !== 'exam_day' && (
+                    <div
+                        onClick={() => navigate('errors')}
+                        className="flex items-center
+            gap-3 p-3 bg-white/60
+            rounded-xl border border-white
+            cursor-pointer hover:bg-white
+            transition-all">
+                        <span className="text-lg
+            flex-shrink-0">⚡</span>
+                        <p className="text-xs
+            text-slate-600 flex-1
+            leading-snug">
+                            <span className="font-bold">
+                                {recentErrors} erro{recentErrors > 1 ? 's' : ''}
+                            </span> registrado{recentErrors > 1 ? 's' : ''} recentemente
+                            — clique para ver os flashcards
+                            criados automaticamente
+                        </p>
+                        <span className="text-slate-400
+            font-bold flex-shrink-0">→</span>
+                    </div>
+                )
+            }
+        </div >
     );
 }

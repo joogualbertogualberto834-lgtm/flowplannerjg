@@ -15,6 +15,7 @@ import { ResetModal } from './components/ResetModal';
 import { TutorialModal } from './components/TutorialModal';
 import { resetAllUserData } from './services/api';
 import { useEffect } from 'react';
+import { SetupWizard } from './components/SetupWizard';
 
 type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword' | 'performance';
 
@@ -27,6 +28,7 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const { user, loading: authLoading } = useAuth();
   const {
     topics,
@@ -45,6 +47,15 @@ export default function App() {
       setShowTutorial(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      const wizardDone = localStorage.getItem('medflow_wizard_done');
+      if (!wizardDone) {
+        setShowWizard(true);
+      }
+    }
+  }, [user]);
 
   if (authLoading) {
     return (
@@ -147,9 +158,23 @@ export default function App() {
           await refresh();
           setShowReset(false);
           localStorage.removeItem('medflow_tutorial_seen');
-          setShowTutorial(true);
+          localStorage.removeItem('medflow_wizard_done');
+          setShowWizard(true);
         }}
       />
+
+      {showWizard && (
+        <SetupWizard
+          onComplete={async () => {
+            setShowWizard(false);
+            await refresh();
+          }}
+          onSkip={() => {
+            localStorage.setItem('medflow_wizard_done', 'true');
+            setShowWizard(false);
+          }}
+        />
+      )}
     </div>
   );
 }
