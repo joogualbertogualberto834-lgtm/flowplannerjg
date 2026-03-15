@@ -43,6 +43,14 @@ export default function App() {
   } = useData();
 
   useEffect(() => {
+    const handleNavigate = (e: any) => {
+      if (e.detail) setActiveTab(e.detail as TabId);
+    };
+    window.addEventListener('navigate', handleNavigate);
+    return () => window.removeEventListener('navigate', handleNavigate);
+  }, []);
+
+  useEffect(() => {
     if (!localStorage.getItem('medflow_tutorial_seen')) {
       setShowTutorial(true);
     }
