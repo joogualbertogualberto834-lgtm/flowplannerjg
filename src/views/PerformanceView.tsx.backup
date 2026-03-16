@@ -22,7 +22,7 @@ import {
     addExam, updateExam, deleteExam,
     addExamError, deleteExamError,
     addDifficultSubtopic,
-    addPersonalGoal, deletePersonalGoal, updateGoalProgress,
+    addPersonalGoal, deletePersonalGoal,
     fetchExamQuestions, saveAttempt, updateAttemptErrorOrigin,
     saveExam
 } from '../services/api';
@@ -166,126 +166,6 @@ export function PerformanceView({ topics }: PerformanceViewProps) {
                 components={metrics.components}
                 historySize={metrics.charts.historySize}
             />
-
-            {/* METAS PESSOAIS — visível direto */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6" id="metas-pessoais">
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h3 className="text-lg font-bold text-slate-800">
-                            Metas Pessoais
-                        </h3>
-                        <p className="text-xs text-slate-400">
-                            Atualize seu progresso diariamente
-                        </p>
-                    </div>
-                    <button
-                        onClick={() => setShowGoalModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors"
-                    >
-                        + Nova Meta
-                    </button>
-                </div>
-
-                {goals.length === 0 ? (
-                    <div className="text-center py-8">
-                        <p className="text-slate-400 text-sm mb-3">
-                            Nenhuma meta criada ainda.
-                        </p>
-                        <p className="text-xs text-slate-400">
-                            Clique em "+ Nova Meta" para começar
-                        </p>
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {goals.map(goal => {
-                            const pct = Math.min(100,
-                                Math.round(
-                                    (goal.current_value /
-                                        goal.target_value) * 100
-                                )
-                            );
-                            const categoryColor = {
-                                estudo: 'bg-blue-500',
-                                saude: 'bg-emerald-500',
-                                exercicio: 'bg-orange-500'
-                            }[goal.category as 'estudo' | 'saude' | 'exercicio'] || 'bg-slate-500';
-
-                            const categoryLabel = {
-                                estudo: '📚 Estudo',
-                                saude: '😴 Saúde',
-                                exercicio: '🏃 Exercício'
-                            }[goal.category as 'estudo' | 'saude' | 'exercicio'] || goal.category;
-
-                            return (
-                                <div key={goal.id}
-                                    className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-
-                                    {/* Header da meta */}
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div>
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                                {categoryLabel}
-                                            </p>
-                                            <p className="text-sm font-bold text-slate-800">
-                                                {goal.title}
-                                            </p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-lg font-black text-slate-800">
-                                                {goal.current_value}
-                                                <span className="text-xs font-normal text-slate-400">
-                                                    /{goal.target_value}
-                                                    {' '}{goal.unit}
-                                                </span>
-                                            </p>
-                                            <p className="text-xs font-bold text-slate-400">
-                                                {pct}%
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Barra de progresso */}
-                                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-3">
-                                        <div
-                                            className={`h-full rounded-full transition-all duration-500 ${categoryColor}`}
-                                            style={{ width: `${pct}%` }}
-                                        />
-                                    </div>
-
-                                    {/* Botões de incremento */}
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase mr-1">
-                                            Adicionar:
-                                        </p>
-                                        {[5, 10, 25, 50].map(inc => (
-                                            <button
-                                                key={inc}
-                                                onClick={async () => {
-                                                    const newVal = goal.current_value + inc;
-                                                    await updateGoalProgress(goal.id, newVal);
-                                                    refresh();
-                                                }}
-                                                className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-800 hover:text-white hover:border-slate-800 transition-all"
-                                            >
-                                                +{inc}
-                                            </button>
-                                        ))}
-                                        <button
-                                            onClick={async () => {
-                                                await updateGoalProgress(goal.id, 0);
-                                                refresh();
-                                            }}
-                                            className="ml-auto text-[10px] text-slate-300 hover:text-rose-400 transition-colors font-bold"
-                                        >
-                                            Zerar
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
 
             <div id="questions-panel-section" className="space-y-4">
                 <div className="flex items-center gap-2">

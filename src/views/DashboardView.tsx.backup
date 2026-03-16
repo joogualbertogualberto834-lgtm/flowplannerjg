@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import { format, addDays, isBefore, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { fetchExams, fetchExamErrors, fetchPersonalGoals, fetchAllFlashcards } from '../services/api';
 import {
     BookOpen,
@@ -53,6 +53,8 @@ export function DashboardView({ data, topics, onUpdate }: DashboardViewProps) {
         }).catch(() => setMentorLoading(false));
     }, []);
 
+    if (!data) return null;
+
     // Próxima prova
     const nextExam = exams
         .filter(e => new Date(e.date) >= new Date())
@@ -61,6 +63,15 @@ export function DashboardView({ data, topics, onUpdate }: DashboardViewProps) {
     const daysToExam = nextExam
         ? differenceInDays(new Date(nextExam.date), new Date())
         : null;
+
+    // Lógica da Fase de Preparação
+    const prepPhase = (() => {
+        if (daysToExam === null) return null;
+        if (daysToExam > 180) return { name: 'Base (Consolidação)', ideal: '100-150', color: 'text-emerald-500', tip: 'Foque em construir uma base sólida nos temas de alta incidência.' };
+        if (daysToExam > 90) return { name: 'Aprofundamento', ideal: '150-250', color: 'text-blue-500', tip: 'Hora de aumentar o volume e focar nos detalhes que diferenciam os aprovados.' };
+        if (daysToExam > 30) return { name: 'Intensificação', ideal: '250-400', color: 'text-amber-500', tip: 'Foco total em questões e simulados. Identifique suas lacunas rapidamente.' };
+        return { name: 'Reta Final', ideal: '400+', color: 'text-rose-500', tip: 'Revisão ultra-rápida e controle emocional. Você está quase lá!' };
+    })();
 
     // Flashcards vencidos hoje
     const overdueFlashcards = flashcards.filter(f =>
@@ -85,72 +96,6 @@ export function DashboardView({ data, topics, onUpdate }: DashboardViewProps) {
     const recentErrors = examErrors.filter(e =>
         differenceInDays(new Date(), new Date(e.created_at)) <= 1
     ).length;
-
-    const dailyTasks = useMemo(() => {
-        const tasks = [];
-
-        // Tarefa 1: Flashcards vencidos
-        if (overdueFlashcards > 0) {
-            tasks.push({
-                id: 'flashcards',
-                label: `Revisar ${overdueFlashcards} flashcard${overdueFlashcards > 1 ? 's' : ''}`,
-                done: false,
-                tab: 'flashcards'
-            });
-        }
-
-        // Tarefa 2: Questões do dia
-        if (dailyTarget && dailyTarget > 0) {
-            const done = studyGoal
-                ? studyGoal.current_value >= (studyGoal.target_value / 7)
-                : false;
-            tasks.push({
-                id: 'questions',
-                label: `${dailyTarget} questões`,
-                done,
-                tab: 'performance'
-            });
-        }
-
-        // Tarefa 3: Registrar erros
-        if (recentErrors > 0 || (dailyTarget && dailyTarget > 0)) {
-            tasks.push({
-                id: 'errors',
-                label: 'Registrar erros do dia',
-                done: recentErrors > 0,
-                tab: 'errors'
-            });
-        }
-
-        // Tarefa 4: Revisar temas atrasados
-        if (overdueTopics > 0) {
-            tasks.push({
-                id: 'reviews',
-                label: `Revisar ${overdueTopics} tema${overdueTopics > 1 ? 's' : ''} atrasado${overdueTopics > 1 ? 's' : ''}`,
-                done: false,
-                tab: 'reviews'
-            });
-        }
-
-        return tasks;
-    }, [overdueFlashcards, overdueTopics, recentErrors, dailyTarget, studyGoal]);
-
-    if (!data) return null;
-
-    // Lógica da Fase de Preparação
-    const prepPhase = (() => {
-        if (daysToExam === null) return null;
-        if (daysToExam > 180) return { name: 'Base (Consolidação)', ideal: '100-150', color: 'text-emerald-500', tip: 'Foque em construir uma base sólida nos temas de alta incidência.' };
-        if (daysToExam > 90) return { name: 'Aprofundamento', ideal: '150-250', color: 'text-blue-500', tip: 'Hora de aumentar o volume e focar nos detalhes que diferenciam os aprovados.' };
-        if (daysToExam > 30) return { name: 'Intensificação', ideal: '250-400', color: 'text-amber-500', tip: 'Foco total em questões e simulados. Identifique suas lacunas rapidamente.' };
-        return { name: 'Reta Final', ideal: '400+', color: 'text-rose-500', tip: 'Revisão ultra-rápida e controle emocional. Você está quase lá!' };
-    })();
-
-    const completedTasks = dailyTasks.filter(t => t.done).length;
-    const totalTasks = dailyTasks.length;
-    const progressPercent = totalTasks > 0
-        ? Math.round((completedTasks / totalTasks) * 100)
-        : 0;
 
     const dayContext = (() => {
         // PROVA HOJE
@@ -458,84 +403,6 @@ export function DashboardView({ data, topics, onUpdate }: DashboardViewProps) {
                     dailySummary={dailySummary}
                     prepPhase={prepPhase}
                 />
-            )}
-
-            {totalTasks > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-100 p-5 mb-2 shadow-sm">
-                    {/* Header da barra */}
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="text-base">📋</span>
-                            <p className="text-sm font-bold text-slate-700">Tarefas de hoje</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-black text-slate-500">
-                                {completedTasks}/{totalTasks}
-                            </span>
-                            {progressPercent === 100 && (
-                                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                                    ✓ Dia completo!
-                                </span>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Barra de progresso */}
-                    <div className="h-3 bg-slate-100 rounded-full overflow-hidden mb-4">
-                        <div
-                            className="h-full rounded-full transition-all duration-700 ease-out"
-                            style={{
-                                width: `${progressPercent}%`,
-                                background: progressPercent === 100
-                                    ? '#10B981'
-                                    : progressPercent > 50
-                                        ? '#3B82F6'
-                                        : '#F59E0B'
-                            }}
-                        />
-                    </div>
-
-                    {/* Lista de tarefas */}
-                    <div className="space-y-2">
-                        {dailyTasks.map(task => (
-                            <div
-                                key={task.id}
-                                onClick={() => {
-                                    window.dispatchEvent(
-                                        new CustomEvent('navigate', { detail: task.tab })
-                                    );
-                                }}
-                                className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all ${task.done
-                                    ? 'bg-emerald-50 border border-emerald-100'
-                                    : 'bg-slate-50 border border-slate-100 hover:border-slate-300 hover:bg-white'
-                                    }`}
-                            >
-                                {/* Checkbox visual */}
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.done
-                                    ? 'bg-emerald-500 border-emerald-500'
-                                    : 'border-slate-300'
-                                    }`}>
-                                    {task.done && (
-                                        <span className="text-white text-[10px] font-black">✓</span>
-                                    )}
-                                </div>
-
-                                {/* Label */}
-                                <p className={`text-xs font-bold flex-1 ${task.done
-                                    ? 'text-emerald-600 line-through'
-                                    : 'text-slate-700'
-                                    }`}>
-                                    {task.label}
-                                </p>
-
-                                {/* Seta se não concluído */}
-                                {!task.done && (
-                                    <span className="text-slate-400 text-xs font-bold">→</span>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
             )}
 
             {/* Stats Grid */}

@@ -13,7 +13,6 @@ interface MentorMessage {
     tab?: string | null;
     emoji: string;
     urgent?: boolean;
-    elementId?: string;
 }
 
 const getMessageForContext = (
@@ -50,13 +49,13 @@ const getMessageForContext = (
                 title: 'Meta de questões',
                 steps: [
                     `Resolva ${dailyTarget} questões em qualquer plataforma externa`,
-                    'Clique no botão abaixo para ir direto às metas',
-                    'Clique em "+25" (ou o número que fez) na meta "Questões semanais"',
-                    'A barra de tarefas do dia sobe automaticamente'
+                    'Volte aqui e clique em "Desempenho" na barra lateral',
+                    'Role até "Metas Pessoais" no final da página',
+                    `Clique no botão "+ X" ao lado da meta "Questões semanais"`,
+                    'O progresso atualiza na hora e a barra acima sobe'
                 ],
-                action: 'Ir direto para Metas →',
-                tab: 'performance',
-                elementId: 'metas-pessoais'
+                action: 'Ir para Desempenho →',
+                tab: 'performance'
             };
 
         if (recentErrors > 0) return {
@@ -182,15 +181,13 @@ const getMessageForContext = (
         emoji: '📊',
         title: 'Como atualizar questões',
         steps: [
-            'Os botões +5, +10, +25, +50 aparecem em cada meta',
-            'Clique no botão correspondente às questões que você fez',
-            'Ex: fez 25 questões → clique em "+25" na meta "Questões semanais"',
-            'O número atualiza na hora e a barra de tarefas sobe',
-            'Faça o mesmo para sono (horas) e exercício (sessões)'
-        ],
-        action: 'Ver Metas Pessoais →',
-        tab: 'performance',
-        elementId: 'metas-pessoais'
+            'Role a página até encontrar "Metas Pessoais"',
+            'Encontre a meta "Questões semanais"',
+            'Clique no botão "+ 25" se fez 25 questões (ou + 10, + 5)',
+            'O número atualiza na hora',
+            'Faça o mesmo para metas de sono e exercício',
+            'O Índice MedFlow aparece após 3 semanas de uso'
+        ]
     };
 
     // ── SEMANA ──
@@ -341,31 +338,6 @@ export function MentorGuide({ activeTab }: { activeTab: string }) {
         setMessage(msg);
     }, [activeTab, overdueFlashcards, overdueTopics, recentErrors, daysToExam, nextExamName, dailyTarget, goalProgress]);
 
-    const navigateAndScroll = (tab: string, elementId?: string) => {
-        // Primeiro navega para a aba
-        window.dispatchEvent(new CustomEvent('navigate', { detail: tab }));
-
-        // Se tem elementId, aguarda a aba carregar e rola até o elemento
-        if (elementId) {
-            setTimeout(() => {
-                const el = document.getElementById(elementId);
-                if (el) {
-                    el.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
-                    });
-                    // Destacar o elemento brevemente
-                    el.style.outline = '3px solid #10B981';
-                    el.style.outlineOffset = '4px';
-                    setTimeout(() => {
-                        el.style.outline = '';
-                        el.style.outlineOffset = '';
-                    }, 2000);
-                }
-            }, 500);
-        }
-    };
-
     const navigate = (tab: string) => {
         window.dispatchEvent(
             new CustomEvent('navigate', { detail: tab })
@@ -441,13 +413,7 @@ export function MentorGuide({ activeTab }: { activeTab: string }) {
                 {/* Botão de ação */}
                 {message.action && message.tab && (
                     <button
-                        onClick={() => {
-                            if (message.elementId) {
-                                navigateAndScroll(message.tab!, message.elementId);
-                            } else {
-                                navigate(message.tab!);
-                            }
-                        }}
+                        onClick={() => navigate(message.tab!)}
                         className={`w-full py-2.5 rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-1 ${message.urgent
                             ? 'bg-orange-500 hover:bg-orange-600 text-white'
                             : 'bg-slate-800 hover:bg-slate-700 text-white'
