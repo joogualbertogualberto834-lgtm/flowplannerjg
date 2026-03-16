@@ -188,14 +188,18 @@ export const postStudySession = async (topicId: number, score: number, durationM
             nextReviewDateStr = nextReview.toISOString();
         }
 
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Usuário não autenticado');
+
         const { error: upsertError } = await supabase.from('user_progress').upsert({
+            user_id: user.id,
             topic_id: topicId,
             current_interval: nextInterval,
             last_score: finalScore,
             next_review_date: nextReviewDateStr,
             urgency_count: newUrgencyCount,
             previous_state: previousState as any
-        }, { onConflict: 'topic_id' });
+        }, { onConflict: 'user_id,topic_id' });
 
         if (upsertError) throw new Error(`Erro ao salvar progresso: ${upsertError.message}`);
 
@@ -601,12 +605,14 @@ export async function resetAllUserData(): Promise<void> {
     const tables = [
         'exam_errors',
         'exams',
+        'exam_questions',
         'difficult_subtopics',
         'personal_goals',
         'flashcards',
         'exam_attempts',
         'study_log',
-        'user_progress'
+        'user_progress',
+        'error_notebook'
     ];
 
     for (const table of tables) {
