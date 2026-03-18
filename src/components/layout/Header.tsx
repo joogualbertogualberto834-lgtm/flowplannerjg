@@ -6,7 +6,7 @@ function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
-type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword';
+type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword' | 'medflow2';
 
 const TAB_LABELS: Record<string, string> = {
     dashboard: 'Início',
@@ -17,6 +17,7 @@ const TAB_LABELS: Record<string, string> = {
     weekly: 'Semana',
     crossword: 'Palavras Cruzadas',
     performance: 'Desempenho',
+    medflow2: 'MedFlow 2.0',
 };
 
 const TAB_SUBTITLES: Record<string, string> = {
@@ -28,6 +29,7 @@ const TAB_SUBTITLES: Record<string, string> = {
     weekly: 'Visão da sua semana',
     crossword: 'Fixe conceitos jogando',
     performance: 'Acompanhe sua preparação',
+    medflow2: 'Motor adaptativo de revisão espaçada',
 };
 
 import { RefreshCw, LogOut, Menu, HelpCircle, RotateCcw } from 'lucide-react';

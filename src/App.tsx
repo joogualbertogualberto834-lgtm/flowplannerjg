@@ -10,22 +10,60 @@ import { ErrorsView } from './views/ErrorsView';
 import { WeeklyView } from './views/WeeklyView';
 import { CrosswordView } from './views/CrosswordView';
 import { PerformanceView } from './views/PerformanceView';
+import { MedFlow2View } from './views/MedFlow2View';
 import { useData } from './hooks/useData';
 import { ResetModal } from './components/ResetModal';
 import { TutorialModal } from './components/TutorialModal';
 import { resetAllUserData } from './services/api';
 import { useEffect } from 'react';
 import { SetupWizard } from './components/SetupWizard';
-import { MentorGuide } from './components/MentorGuide';
 
-type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword' | 'performance';
+type TabId = 'dashboard' | 'topics' | 'reviews' | 'flashcards' | 'errors' | 'weekly' | 'crossword' | 'performance' | 'medflow2';
 
 import { useAuth } from './hooks/useAuth';
 import { AuthView } from './views/AuthView';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
+
+// Basic Error Boundary Component
+class ErrorBoundary extends React.Component<any, any> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 bg-rose-50 border-2 border-dashed border-rose-200 rounded-[2.5rem] flex flex-col items-center text-center">
+          <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mb-4">
+            <AlertTriangle size={32} />
+          </div>
+          <h2 className="text-xl font-black text-rose-900 mb-2">Ops! Algo deu errado.</h2>
+          <p className="text-sm text-rose-600 font-medium max-w-xs mb-6">
+            Ocorreu um erro ao carregar esta visualização. Tente atualizar a página.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-rose-600 text-white font-bold rounded-xl shadow-lg shadow-rose-100 hover:bg-rose-700 transition-all"
+          >
+            Atualizar App
+          </button>
+        </div>
+      );
+    }
+
+    return (this as any).props.children;
+  }
+}
+
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [activeTab, setActiveTab] = useState<TabId>('medflow2');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -106,6 +144,13 @@ export default function App() {
         return <CrosswordView />;
       case 'performance':
         return <PerformanceView topics={topics} />;
+      case 'medflow2':
+        return (
+          <ErrorBoundary>
+            <MedFlow2View topics={topics} onUpdate={refresh} />
+          </ErrorBoundary>
+        );
+
       default:
         return null;
     }
@@ -154,7 +199,6 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <MentorGuide activeTab={activeTab} />
 
       <TutorialModal
         isOpen={showTutorial}
