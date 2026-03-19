@@ -131,6 +131,13 @@ function calcNextIntervalByRule(rule: ReviewRule, score: number, isHot: boolean,
 type ReviewStatus = 'pending' | 'today' | 'overdue' | 'done';
 type ReviewSubTab = 'painel' | 'calendario' | 'provas' | 'flashcards' | 'erros';
 
+interface MappedExamError {
+    id: string;
+    specialty: string;
+    subtheme: string;
+    note: string;
+}
+
 interface ExamEntry {
     id: string;
     banca: string;
@@ -138,9 +145,11 @@ interface ExamEntry {
     score: number;
     durationMinutes: number;
     date: string;
-    errorSubthemes: string[]; // List of subthemes missed
-    questionsTotal?: number; // Added for mission sync
+    errorSubthemes: string[]; // Kept for top-level display compatibility
+    mappedErrors?: MappedExamError[];
+    questionsTotal?: number;
 }
+
 
 interface Flashcard {
     id: string;
@@ -292,7 +301,8 @@ const PerformanceBySubthemeChart = ({ data, chartSpec, chartTheme, onSpecChange,
     const activeSpec = SPECIALTIES.find(s => s.name === chartSpec);
 
     return (
-        <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 h-full">
+        <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 shadow-sm border border-slate-100 h-full">
+
             <div className="flex items-start justify-between mb-8">
                 <div className="flex gap-4">
                     <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
@@ -475,7 +485,8 @@ const FlashcardsDashboard = ({
                 {filteredCards.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {filteredCards.map(card => (
-                            <div key={card.id} className="glass-card p-6 rounded-3xl border border-white/50 shadow-sm hover:shadow-md transition-all group">
+                            <div key={card.id} className="glass-card p-5 md:p-6 rounded-[1.5rem] md:rounded-3xl border border-white/50 shadow-sm hover:shadow-md transition-all group">
+
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="flex flex-wrap gap-2">
                                         <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-600 uppercase tracking-wider">{card.theme}</span>
@@ -512,7 +523,8 @@ const FlashcardsDashboard = ({
                         ))}
                     </div>
                 ) : (
-                    <div className="min-h-[400px] border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-center p-12 bg-slate-50/50">
+                    <div className="min-h-[400px] border-2 border-dashed border-slate-200 rounded-[2rem] md:rounded-[3rem] flex flex-col items-center justify-center text-center p-6 md:p-12 bg-slate-50/50">
+
                         <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-lg mb-6 text-slate-200">
                             <LayoutGrid size={40} />
                         </div>
@@ -596,7 +608,8 @@ const ErrorsDashboard = ({
                     return (
                         <div
                             key={error.id}
-                            className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm relative group hover:shadow-md transition-all flex flex-col"
+                            className="bg-white p-5 md:p-6 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm relative group hover:shadow-md transition-all flex flex-col"
+
                         >
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex flex-wrap gap-2">
@@ -657,7 +670,8 @@ const ErrorsDashboard = ({
                 })}
 
                 {filteredErrors.length === 0 && (
-                    <div className="col-span-full py-24 text-center space-y-4 bg-slate-50/50 rounded-[3rem] border-2 border-dashed border-slate-200">
+                    <div className="col-span-full py-12 md:py-24 text-center space-y-4 bg-slate-50/50 rounded-[2rem] md:rounded-[3rem] border-2 border-dashed border-slate-200">
+
                         <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto text-slate-200 shadow-sm">
                             <AlertCircle size={40} />
                         </div>
@@ -851,6 +865,22 @@ const ExamsDashboard = ({
     const [erroTab, setErroTab] = useState<'subtema' | 'disciplina'>('subtema');
     const [examsTab, setExamsTab] = useState<'geral' | 'bancas' | 'erros'>('geral');
 
+    // New statistical breakdown by Year and Specialty
+    const errorsTimeline = exams.reduce((acc, ex) => {
+        const year = ex.ano;
+        const mapped = ex.mappedErrors || [];
+        
+        mapped.forEach(me => {
+            const key = `${year}-${me.specialty}`;
+            if (!acc[key]) acc[key] = { year, specialty: me.specialty, counts: {} as Record<string, number> };
+            acc[key].counts[me.subtheme] = (acc[key].counts[me.subtheme] || 0) + 1;
+        });
+        return acc;
+    }, {} as Record<string, { year: number, specialty: string, counts: Record<string, number> }>);
+
+    const sortedTimeline = Object.values(errorsTimeline).sort((a,b) => b.year - a.year || a.specialty.localeCompare(b.specialty));
+
+
     // Process data for charts
     const performanceData = exams.slice().reverse().map((e) => ({
         mes: new Date(e.date).toLocaleDateString('pt-BR', { month: 'short' }),
@@ -899,7 +929,7 @@ const ExamsDashboard = ({
         <div className="space-y-8 animate-in fade-in duration-500">
             {/* Action Bar & Internal Tabs */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-100 pb-6">
-                <div className="flex bg-slate-100 p-1 rounded-2xl w-fit shadow-inner">
+                <div className="flex overflow-x-auto scrollbar-hide bg-slate-100 p-1 rounded-2xl w-full md:w-fit shadow-inner">
                     {[
                         { id: 'geral', label: 'Geral', icon: <LayoutDashboard size={14} /> },
                         { id: 'bancas', label: 'Bancas', icon: <Target size={14} /> },
@@ -908,7 +938,7 @@ const ExamsDashboard = ({
                         <button
                             key={tab.id}
                             onClick={() => setExamsTab(tab.id as any)}
-                            className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${examsTab === tab.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                            className={`px-6 md:px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap ${examsTab === tab.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                         >
                             {tab.icon} {tab.label}
                         </button>
@@ -922,6 +952,7 @@ const ExamsDashboard = ({
                     <Plus size={18} /> Registrar Simulado
                 </button>
             </div>
+
 
             {examsTab === 'geral' && (
                 <div className="space-y-12 animate-in slide-in-from-bottom-4 duration-500">
@@ -967,7 +998,8 @@ const ExamsDashboard = ({
                     </div>
 
                     {/* Histórico Consolidado */}
-                    <div className="bg-white/40 backdrop-blur-md rounded-[3rem] p-10 border border-white/50 shadow-xl overflow-hidden">
+                    <div className="bg-white/40 backdrop-blur-md rounded-[2rem] md:rounded-[3rem] p-6 md:p-10 border border-white/50 shadow-xl overflow-hidden">
+
                         <div className="flex items-center justify-between mb-8">
                             <div>
                                 <h3 className="text-2xl font-black text-slate-800">Gerenciar Provas</h3>
@@ -980,7 +1012,7 @@ const ExamsDashboard = ({
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {exams.slice().reverse().map(exam => (
-                                <div key={exam.id} className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all group relative">
+                                <div key={exam.id} className="glass-card p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] relative group border border-transparent hover:border-slate-200/50 transition-all">
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
                                             <div className="text-[10px] font-black text-slate-400 uppercase mb-1">{exam.ano}</div>
@@ -1014,13 +1046,28 @@ const ExamsDashboard = ({
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-wrap gap-1.5 pt-4 border-t border-slate-50">
-                                        {exam.errorSubthemes.map(err => (
-                                            <span key={err} className="text-[9px] font-black px-2 py-1 bg-slate-50 text-slate-400 rounded-lg group-hover:bg-rose-50 group-hover:text-rose-600 transition-colors uppercase">
-                                                {err}
-                                            </span>
-                                        ))}
+                                    <div className="flex flex-col gap-2 pt-4 border-t border-slate-50">
+                                        {(exam.mappedErrors || []).length > 0 ? (
+                                            exam.mappedErrors?.map(err => (
+                                                <div key={err.id} className="flex flex-col gap-0.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[8px] font-black px-1.5 py-0.5 bg-rose-50 text-rose-600 rounded uppercase">{err.specialty.substring(0,3)}</span>
+                                                        <span className="text-[10px] font-bold text-slate-700">{err.subtheme}</span>
+                                                    </div>
+                                                    {err.note && <p className="text-[9px] text-slate-400 italic pl-6 leading-tight">"{err.note}"</p>}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {exam.errorSubthemes.map(err => (
+                                                    <span key={err} className="text-[9px] font-black px-2 py-1 bg-slate-50 text-slate-400 rounded-lg uppercase">
+                                                        {err}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
+
                                 </div>
                             ))}
                             {exams.length === 0 && (
@@ -1035,7 +1082,8 @@ const ExamsDashboard = ({
 
             {examsTab === 'bancas' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in slide-in-from-bottom-4 duration-500">
-                    <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                    <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] border border-slate-100 shadow-sm">
+
                         <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-slate-400 mb-8">Desempenho por Instituição</h3>
                         <div className="space-y-4">
                             {bancaStats.map((banca, i) => (
@@ -1055,7 +1103,8 @@ const ExamsDashboard = ({
                         </div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                    <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[3rem] border border-slate-100 shadow-sm">
+
                         <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-slate-400 mb-8">Tempo de Prova</h3>
                         <div className="h-64">
                             <ResponsiveContainer width="100%" height="100%">
@@ -1073,7 +1122,8 @@ const ExamsDashboard = ({
             )}
 
             {examsTab === 'erros' && (
-                <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
+                <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-slate-100 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
+
                     <div className="flex items-center justify-between mb-10">
                         <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-slate-400">Distribuição de Lacunas de Conhecimento</h3>
                         <div className="flex bg-slate-100 p-1 rounded-xl">
@@ -1082,7 +1132,7 @@ const ExamsDashboard = ({
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
                         {sortedErrors.map((erro, i) => (
                             <div key={i} className="p-6 bg-slate-50 rounded-3xl border border-transparent hover:border-rose-100 transition-all group">
                                 <div className="flex justify-between items-start mb-4">
@@ -1098,6 +1148,43 @@ const ExamsDashboard = ({
                             </div>
                         ))}
                     </div>
+
+                    <div className="space-y-6 pt-10 border-t border-slate-100">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-1.5 h-8 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xl font-black text-slate-800">Análise por Instituição & Especialidade</h3>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-4">
+                            {sortedTimeline.length > 0 ? sortedTimeline.map((item, idx) => (
+                                <div key={idx} className="bg-slate-50 rounded-[2rem] p-6 border border-slate-200/50 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                    <div className="flex items-center gap-4 min-w-[140px]">
+                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm font-black text-slate-400">
+                                            {item.year}
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Especialidade</p>
+                                            <p className="font-black text-slate-800">{item.specialty}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex-1 flex flex-wrap gap-2">
+                                        {Object.entries(item.counts).map(([sub, count]) => (
+                                            <div key={sub} className="bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm flex items-center gap-3">
+                                                <span className="text-xs font-black text-slate-700">{sub}</span>
+                                                <span className="w-6 h-6 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center text-[10px] font-black">{count}x</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )) : (
+                                <div className="py-12 text-center bg-slate-50/50 rounded-3xl border-2 border-dashed border-slate-200">
+                                    <p className="text-slate-400 font-bold italic">Nenhum erro detalhado mapeado ainda.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                 </div>
             )}
         </div>
@@ -1576,9 +1663,11 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
     const [examScore, setExamScore] = useState(70);
     const [examMinutes, setExamMinutes] = useState(240);
     const [examDate, setExamDate] = useState(toDateStr(new Date()));
-    const [examErrors, setExamErrors] = useState<string[]>([]);
+    const [examErrors, setExamErrors] = useState<MappedExamError[]>([]);
     const [tempError, setTempError] = useState('');
+    const [tempErrorNote, setTempErrorNote] = useState('');
     const [examErrorSpec, setExamErrorSpec] = useState(SPECIALTIES[0]?.name || '');
+
     const [savedSubthemes, setSavedSubthemes] = useState<string[]>(loadSubthemes);
 
     // DND State
@@ -1773,9 +1862,10 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
         setExamScore(exam.score);
         setExamMinutes(exam.durationMinutes);
         setExamDate(exam.date);
-        setExamErrors(exam.errorSubthemes);
+        setExamErrors(exam.mappedErrors || exam.errorSubthemes.map(s => ({ id: generateId(), specialty: 'Geral', subtheme: s, note: '' })));
         setShowRegisterExamModal(true);
     };
+
 
     const handleRegisterExam = () => {
         if (!examBanca) return;
@@ -1788,26 +1878,43 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
             score: examScore,
             durationMinutes: examMinutes,
             date: examDate,
-            errorSubthemes: examErrors,
+            errorSubthemes: examErrors.map(e => e.subtheme),
+            mappedErrors: examErrors,
             questionsTotal: examQuestTotal
         };
 
         if (editingExamId) {
             setExams(prev => prev.map(e => e.id === editingExamId ? examData : e));
+            // Update associated errors in the notebook too
+            setErrors(prev => {
+                const filtered = prev.filter(err => err.examId !== examId);
+                const newNoteEntries: ErrorEntry2[] = examErrors.map(me => ({
+                    id: me.id,
+                    specialty: me.specialty,
+                    topic: me.subtheme,
+                    subtopic: me.subtheme,
+                    origin: 'falta_contato',
+                    date: examDate,
+                    examId: examId,
+                    notes: me.note
+                }));
+                return [...newNoteEntries, ...filtered];
+            });
             setEditingExamId(null);
         } else {
             setExams(prev => [...prev, examData]);
             
             // Sync with global error notebook
             if (examErrors.length > 0) {
-                const newErrors: ErrorEntry2[] = examErrors.map(sub => ({
-                    id: generateId(),
-                    specialty: regSpec || SPECIALTIES[0].name, // Fallback
-                    topic: regTheme || 'Geral',
-                    subtopic: sub,
+                const newErrors: ErrorEntry2[] = examErrors.map(me => ({
+                    id: me.id,
+                    specialty: me.specialty,
+                    topic: me.subtheme,
+                    subtopic: me.subtheme,
                     origin: 'falta_contato', // Default origin for exam errors
                     date: examDate,
-                    examId: examId
+                    examId: examId,
+                    notes: me.note
                 }));
                 setErrors(prev => [...newErrors, ...prev]);
             }
@@ -1822,13 +1929,21 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
         setExamScore(70);
         setExamMinutes(240);
         setExamErrors([]);
+        setTempErrorNote('');
     };
 
-    const addErrorSubtheme = (sub: string) => {
+
+    const addMappedError = (spec: string, sub: string, note: string) => {
         if (!sub) return;
         const clean = sub.trim();
-        if (clean && !examErrors.includes(clean)) {
-            setExamErrors(prev => [...prev, clean]);
+        if (clean) {
+            const newMapped: MappedExamError = {
+                id: generateId(),
+                specialty: spec,
+                subtheme: clean,
+                note: note
+            };
+            setExamErrors(prev => [...prev, newMapped]);
 
             if (!savedSubthemes.includes(clean)) {
                 const updated = [clean, ...savedSubthemes];
@@ -1838,9 +1953,10 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
         }
     };
 
-    const removeErrorSubtheme = (sub: string) => {
-        setExamErrors(prev => prev.filter(s => s !== sub));
+    const removeErrorSubtheme = (id: string) => {
+        setExamErrors(prev => prev.filter(s => s.id !== id));
     };
+
 
     const handleCompleteReview = () => {
         if (!showCompleteModal) return;
@@ -1949,11 +2065,13 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
     };
 
     return (
-        <div className="max-w-6xl mx-auto pb-20 font-sans">
+        <div className="max-w-6xl mx-auto px-4 md:px-0 pb-20 font-sans">
+
             {/* Header / Hero Area */}
             <div className="flex flex-col md:flex-row gap-6 mb-12">
                 {/* HERO: O que estudar agora */}
-                <div className="flex-[2] glass-card rounded-[2.5rem] p-8 relative overflow-hidden group">
+                <div className="flex-[2] glass-card rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 relative overflow-hidden group">
+
                     <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl -mr-32 -mt-32" />
                     
                     <div className="relative z-10">
@@ -1964,9 +2082,10 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                         
                         {overdue.length > 0 || todayReviews.length > 0 ? (
                             <div className="space-y-4">
-                                <h2 className="text-3xl font-black text-slate-800 tracking-tighter leading-tight">
+                                <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tighter leading-tight">
                                     {(overdue[0] || todayReviews[0]).theme}
                                 </h2>
+
                                 <div className="flex items-center gap-4 text-sm font-bold text-slate-500">
                                     <span className="flex items-center gap-1.5 bg-white/60 px-3 py-1.5 rounded-full shadow-sm">
                                         <BookOpen size={14} className="text-emerald-500" />
@@ -2000,7 +2119,8 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                 </div>
 
                 {/* Prominent Index */}
-                <div className="flex-1 glass-card rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center">
+                <div className="flex-1 glass-card rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 flex flex-col items-center justify-center text-center">
+
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6">Índice MedFlow</h3>
                     <div className="relative w-32 h-32 mb-4">
                         <svg className="w-full h-full transform -rotate-90">
@@ -2022,7 +2142,8 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                 </div>
 
                 {/* MISSÃO LONG PRAZO - WIDGET COMPACTO */}
-                <div className="flex-1 glass-card rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center overflow-hidden">
+                <div className="flex-1 glass-card rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 flex flex-col items-center justify-center text-center overflow-hidden">
+
                     <LongTermMission 
                         total={totalQuestions} 
                         onAdd={(n) => setTotalQuestions(prev => prev + n)} 
@@ -2031,10 +2152,12 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
             </div>
 
             {/* Sub-tabs Minimal */}
-            <div className="flex bg-slate-100/50 backdrop-blur-sm p-1 rounded-2xl w-fit mb-12 shadow-inner mx-auto border border-white/40">
+            <div className="flex overflow-x-auto scrollbar-hide bg-slate-100/50 backdrop-blur-sm p-1 rounded-2xl w-full md:w-fit mb-8 md:mb-12 shadow-inner mx-auto border border-white/40">
+
                 <button
                     onClick={() => setActiveSubTab('painel')}
-                    className={`px-10 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeSubTab === 'painel' ? 'bg-white text-slate-900 shadow-sm scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                    className={`px-6 md:px-10 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeSubTab === 'painel' ? 'bg-white text-slate-900 shadow-sm scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+
                 >
                     Painel
                 </button>
@@ -2470,9 +2593,10 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
             {/* MODAL DE CONCLUSÃO */}
             {
                 showCompleteModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowCompleteModal(null)} />
-                        <div className="relative bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowCompleteModal(null)} />
+                        <div className="relative bg-white rounded-[2rem] md:rounded-3xl p-6 md:p-8 max-w-lg w-full max-h-[95vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200 my-auto">
+
                             <div className="flex items-center justify-between mb-6">
                                 <div>
                                     <span className="text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md mb-2 inline-block tracking-widest">{showCompleteModal.label}</span>
@@ -2553,9 +2677,10 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
             {/* MODAL DE REAGENDAMENTO */}
             {
                 showRelocateModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowRelocateModal(null)} />
-                        <div className="relative bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowRelocateModal(null)} />
+                        <div className="relative bg-white rounded-[2rem] md:rounded-3xl p-6 md:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-auto">
+
                             <div className="flex justify-between items-start mb-6">
                                 <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center shadow-inner">
                                     <CalendarIcon size={32} />
@@ -2621,7 +2746,8 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                 showRegisterModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowRegisterModal(false)} />
-                        <div className="relative bg-white rounded-[2.5rem] p-4 md:p-10 max-w-2xl w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-8">
+                        <div className="relative bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-10 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-auto">
+
                             <div className="flex justify-between items-start mb-8">
                                 <div className="flex items-center gap-4">
                                     <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner">
@@ -2802,9 +2928,9 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
             {/* MODAL REGISTRAR SIMULADO */}
             {
                 showRegisterExamModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowRegisterExamModal(false)} />
-                        <div className="relative bg-white rounded-[2.5rem] p-10 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 duration-200">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowRegisterExamModal(false)} />
+                        <div className="relative bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-10 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-auto">
                             <div className="flex items-center justify-between mb-8">
                                 <h3 className="text-2xl font-black text-slate-800">Registrar Simulado</h3>
                                 <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
@@ -2891,11 +3017,18 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                                                     ))}
                                                 </select>
                                             </div>
+                                            <textarea
+                                                placeholder="O que exatamente errei? (Ex: Esqueci critério X, errei dose Y...)"
+                                                value={tempErrorNote}
+                                                onChange={(e) => setTempErrorNote(e.target.value)}
+                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-xs font-bold focus:border-rose-400 focus:bg-white transition-all outline-none resize-none h-20"
+                                            />
                                             <button
                                                 onClick={() => {
-                                                    if (tempError && !examErrors.includes(tempError)) {
-                                                        addErrorSubtheme(tempError);
+                                                    if (tempError) {
+                                                        addMappedError(examErrorSpec, tempError, tempErrorNote);
                                                         setTempError('');
+                                                        setTempErrorNote('');
                                                     }
                                                 }}
                                                 disabled={!tempError}
@@ -2904,20 +3037,29 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                                                 <Plus size={16} /> ADICIONAR ERRO
                                             </button>
                                         </div>
-                                        <div className="max-h-48 overflow-y-auto flex flex-wrap gap-2 p-2 bg-slate-50 rounded-2xl border border-slate-100">
-                                            {examErrors.map(sub => (
-                                                <div key={sub} className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 flex items-center gap-2 group shadow-sm">
-                                                    {sub}
-                                                    <button onClick={() => removeErrorSubtheme(sub)} className="text-slate-300 hover:text-rose-500 transition-colors">
-                                                        <X size={12} />
-                                                    </button>
+                                        <div className="max-h-56 overflow-y-auto flex flex-col gap-2 p-2 bg-slate-50 rounded-2xl border border-slate-100">
+                                            {examErrors.map(err => (
+                                                <div key={err.id} className="bg-white border border-slate-200 p-3 rounded-xl flex flex-col gap-1 group shadow-sm relative">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">{err.specialty}</span>
+                                                        <button onClick={() => removeErrorSubtheme(err.id)} className="text-slate-300 hover:text-rose-500 transition-colors">
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-xs font-black text-slate-800">{err.subtheme}</p>
+                                                    {err.note && (
+                                                        <p className="text-[10px] font-bold text-slate-400 italic mt-1 border-l-2 border-slate-100 pl-2">
+                                                            "{err.note}"
+                                                        </p>
+                                                    )}
                                                 </div>
                                             ))}
                                             {examErrors.length === 0 && (
-                                                <p className="text-[10px] text-slate-400 font-bold italic p-4 text-center w-full">Clique nas erradas para mapear</p>
+                                                <p className="text-[10px] text-slate-400 font-bold italic p-4 text-center w-full">Registre os erros para análise estatística</p>
                                             )}
                                         </div>
                                     </div>
+
                                 </div>
                             </div>
 
