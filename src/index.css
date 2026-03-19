@@ -47,4 +47,12 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  @keyframes progress-45 {
+    from { width: 0%; }
+    to { width: 100%; }
+  }
+  .animate-progress-45 {
+    animation: progress-45 45s linear infinite;
+  }
 }
