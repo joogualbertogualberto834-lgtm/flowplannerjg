@@ -451,19 +451,36 @@ const FlashcardsDashboard = ({
                     Estudar Pendentes ({stats.pending} Novos + Revisões)
                 </button>
 
-                <div className="min-h-[400px] border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-center p-12 bg-slate-50/50">
-                    <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-lg mb-6 text-slate-200">
-                        <LayoutGrid size={40} />
+                {filteredCards.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredCards.map(card => (
+                            <div key={card.id} className="glass-card p-6 rounded-3xl border border-white/50 shadow-sm hover:shadow-md transition-all group">
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-wider">{card.theme}</span>
+                                    <span className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase ${card.level === 'hard' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                        {card.level === 'hard' ? 'Difícil' : 'Bom'}
+                                    </span>
+                                </div>
+                                <h4 className="font-bold text-slate-800 mb-2 line-clamp-2">{card.front}</h4>
+                                <p className="text-xs text-slate-400 font-medium">Próxima revisão: {card.nextReview}</p>
+                            </div>
+                        ))}
                     </div>
-                    <h3 className="text-xl font-black text-slate-800 mb-2">Nenhum card encontrado</h3>
-                    <p className="text-xs font-bold text-slate-400 max-w-xs">Organize seu conhecimento médico com flashcards dinâmicos e memorização ativa.</p>
-                    <button 
-                        onClick={onAddCard}
-                        className="mt-8 bg-white border border-slate-200 text-slate-600 px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
-                    >
-                        Criar Primeiro Card
-                    </button>
-                </div>
+                ) : (
+                    <div className="min-h-[400px] border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-center p-12 bg-slate-50/50">
+                        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-lg mb-6 text-slate-200">
+                            <LayoutGrid size={40} />
+                        </div>
+                        <h3 className="text-xl font-black text-slate-800 mb-2">Nenhum card encontrado</h3>
+                        <p className="text-xs font-bold text-slate-400 max-w-xs">Organize seu conhecimento médico com flashcards dinâmicos e memorização ativa.</p>
+                        <button 
+                            onClick={onAddCard}
+                            className="mt-8 bg-white border border-slate-200 text-slate-600 px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
+                        >
+                            Criar Primeiro Card
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -1534,7 +1551,8 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
             nextReview: todayStr,
             box: 0
         };
-        setFlashcards([newCard, ...flashcards]);
+        setFlashcards(prev => [newCard, ...prev]);
+        setErrors(prev => prev.filter(e => e.id !== err.id));
     };
 
     return (
