@@ -49,7 +49,14 @@ export function FlashcardsView({
     onUpdate,
 }: FlashcardsViewProps) {
     const [showAdd, setShowAdd] = useState(false);
-    const [newCard, setNewCard] = useState({ topic_id: '', front: '', back: '' });
+    const [newCard, setNewCard] = useState({ 
+        topic_id: '', 
+        front: '', 
+        back: '',
+        front_image_url: '',
+        back_image_url: '' 
+    });
+
     const [studySession, setStudySession] = useState<{
         cards: Flashcard[];
         index: number;
@@ -90,7 +97,14 @@ export function FlashcardsView({
             await addFlashcard({ ...newCard, topic_id: parseInt(newCard.topic_id) });
             await onUpdate();
             setShowAdd(false);
-            setNewCard({ topic_id: '', front: '', back: '' });
+            setNewCard({ 
+                topic_id: '', 
+                front: '', 
+                back: '',
+                front_image_url: '',
+                back_image_url: ''
+            });
+
         } catch (err) {
             alert(`Erro ao salvar flashcard: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
         } finally {
@@ -288,26 +302,47 @@ export function FlashcardsView({
                             className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group"
                         >
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase flex justify-between items-center">
                                         Frente
+                                        {card.front_image_url && (
+                                            <span className="text-emerald-500 lowercase font-normal italic">possui imagem</span>
+                                        )}
                                     </label>
                                     <textarea
                                         className="w-full bg-transparent border-none outline-none text-sm font-medium resize-none focus:ring-1 focus:ring-blue-500 rounded p-1"
                                         defaultValue={card.front}
-                                        onBlur={(e) => updateFlashcard(card.id, e.target.value, card.back)}
+                                        onBlur={(e) => updateFlashcard(card.id, e.target.value, card.back, card.front_image_url, card.back_image_url)}
+                                    />
+                                    <input 
+                                        type="text"
+                                        placeholder="URL da Imagem (Frente)"
+                                        className="w-full bg-slate-50 border-none text-[10px] text-slate-400 outline-none focus:ring-1 focus:ring-blue-500 rounded px-2 py-1"
+                                        defaultValue={card.front_image_url}
+                                        onBlur={(e) => updateFlashcard(card.id, card.front, card.back, e.target.value, card.back_image_url)}
                                     />
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase flex justify-between items-center">
                                         Verso
+                                        {card.back_image_url && (
+                                            <span className="text-emerald-500 lowercase font-normal italic">possui imagem</span>
+                                        )}
                                     </label>
                                     <textarea
                                         className="w-full bg-transparent border-none outline-none text-sm text-slate-600 resize-none focus:ring-1 focus:ring-emerald-500 rounded p-1"
                                         defaultValue={card.back}
-                                        onBlur={(e) => updateFlashcard(card.id, card.front, e.target.value)}
+                                        onBlur={(e) => updateFlashcard(card.id, card.front, e.target.value, card.front_image_url, card.back_image_url)}
+                                    />
+                                    <input 
+                                        type="text"
+                                        placeholder="URL da Imagem (Verso)"
+                                        className="w-full bg-slate-50 border-none text-[10px] text-slate-400 outline-none focus:ring-1 focus:ring-emerald-500 rounded px-2 py-1"
+                                        defaultValue={card.back_image_url}
+                                        onBlur={(e) => updateFlashcard(card.id, card.front, card.back, card.front_image_url, e.target.value)}
                                     />
                                 </div>
+
                             </div>
                             <div className="mt-3 pt-3 border-t border-slate-50 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
@@ -374,21 +409,47 @@ export function FlashcardsView({
                                         <span className="absolute top-6 left-6 text-[10px] font-bold text-slate-300 uppercase tracking-widest">
                                             Pergunta
                                         </span>
-                                        <p className="text-2xl font-bold text-slate-800 leading-relaxed">
-                                            {studySession.cards[studySession.index].front}
-                                        </p>
-                                        <p className="absolute bottom-8 text-xs text-slate-400 font-bold uppercase tracking-widest animate-pulse">
+                                        <div className="flex flex-col items-center gap-4 w-full">
+                                            {studySession.cards[studySession.index].front_image_url && (
+                                                <div className="w-full max-h-48 overflow-hidden rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 shadow-inner">
+                                                    <img 
+                                                        src={studySession.cards[studySession.index].front_image_url} 
+                                                        alt="Frente do Flashcard"
+                                                        className="max-w-full max-h-48 object-contain"
+                                                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                                                    />
+                                                </div>
+                                            )}
+                                            <p className="text-xl font-bold text-slate-800 leading-relaxed break-words w-full">
+                                                {studySession.cards[studySession.index].front}
+                                            </p>
+                                        </div>
+                                        <p className="absolute bottom-6 text-[10px] text-slate-300 font-bold uppercase tracking-widest animate-pulse">
                                             Toque para ver a resposta
                                         </p>
+
                                     </div>
                                     {/* Verso */}
                                     <div className="absolute inset-0 backface-hidden bg-emerald-600 rounded-3xl shadow-2xl flex flex-col items-center justify-center p-12 text-center rotate-y-180 text-white">
                                         <span className="absolute top-6 left-6 text-[10px] font-bold text-emerald-200 uppercase tracking-widest">
                                             Resposta
                                         </span>
-                                        <p className="text-2xl font-bold leading-relaxed">
-                                            {studySession.cards[studySession.index].back}
-                                        </p>
+                                        <div className="flex flex-col items-center gap-4 w-full">
+                                            {studySession.cards[studySession.index].back_image_url && (
+                                                <div className="w-full max-h-48 overflow-hidden rounded-xl bg-white/10 flex items-center justify-center border border-white/20 shadow-inner">
+                                                    <img 
+                                                        src={studySession.cards[studySession.index].back_image_url} 
+                                                        alt="Verso do Flashcard"
+                                                        className="max-w-full max-h-48 object-contain"
+                                                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                                                    />
+                                                </div>
+                                            )}
+                                            <p className="text-xl font-bold leading-relaxed break-words w-full">
+                                                {studySession.cards[studySession.index].back}
+                                            </p>
+                                        </div>
+
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -446,28 +507,45 @@ export function FlashcardsView({
                             onChange={(v) => setNewCard({ ...newCard, topic_id: v })}
                         />
                     </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
-                            Pergunta (Frente)
-                        </label>
-                        <textarea
-                            required
-                            value={newCard.front}
-                            onChange={(e) => setNewCard({ ...newCard, front: e.target.value })}
-                            className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none h-24"
-                        />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
+                                Pergunta (Frente)
+                            </label>
+                            <textarea
+                                required
+                                value={newCard.front}
+                                onChange={(e) => setNewCard({ ...newCard, front: e.target.value })}
+                                className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none h-24 text-sm"
+                            />
+                            <input 
+                                type="text"
+                                placeholder="URL da Imagem (Frente) - Opcional"
+                                value={newCard.front_image_url}
+                                onChange={(e) => setNewCard({ ...newCard, front_image_url: e.target.value })}
+                                className="w-full mt-2 px-3 py-1.5 rounded-lg border border-slate-100 outline-none text-xs focus:ring-2 focus:ring-emerald-500/20"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
+                                Resposta (Verso)
+                            </label>
+                            <textarea
+                                required
+                                value={newCard.back}
+                                onChange={(e) => setNewCard({ ...newCard, back: e.target.value })}
+                                className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none h-24 text-sm"
+                            />
+                            <input 
+                                type="text"
+                                placeholder="URL da Imagem (Verso) - Opcional"
+                                value={newCard.back_image_url}
+                                onChange={(e) => setNewCard({ ...newCard, back_image_url: e.target.value })}
+                                className="w-full mt-2 px-3 py-1.5 rounded-lg border border-slate-100 outline-none text-xs focus:ring-2 focus:ring-emerald-500/20"
+                            />
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">
-                            Resposta (Verso)
-                        </label>
-                        <textarea
-                            required
-                            value={newCard.back}
-                            onChange={(e) => setNewCard({ ...newCard, back: e.target.value })}
-                            className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none h-24"
-                        />
-                    </div>
+
                     <ModalActions
                         onCancel={() => setShowAdd(false)}
                         loading={isAdding}

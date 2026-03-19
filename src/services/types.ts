@@ -28,8 +28,11 @@ export interface Flashcard {
   specialty?: string;
   front: string;
   back: string;
+  front_image_url?: string;
+  back_image_url?: string;
   next_review: string | null;
   last_difficulty: number | null;
+
   current_interval: number;
   repetition_level: number;
 }

@@ -283,15 +283,34 @@ export const postStudyLog = async (durationMinutes: number) => {
 
 // --- Flashcards Ops ---
 
-export const addFlashcard = async (data: { topic_id: number; front: string; back: string }) => {
+export const addFlashcard = async (data: { 
+    topic_id: number; 
+    front: string; 
+    back: string;
+    front_image_url?: string;
+    back_image_url?: string;
+}) => {
+
     const { data: res, error } = await supabase.from('flashcards').insert(data).select().single();
     if (error) throw error;
     return res as any;
 };
 
-export const updateFlashcard = async (id: number, front: string, back: string) => {
-    await supabase.from('flashcards').update({ front, back }).eq('id', id);
+export const updateFlashcard = async (
+    id: number, 
+    front: string, 
+    back: string, 
+    front_image_url?: string, 
+    back_image_url?: string
+) => {
+    await supabase.from('flashcards').update({ 
+        front, 
+        back, 
+        front_image_url, 
+        back_image_url 
+    }).eq('id', id);
 };
+
 
 export const deleteFlashcard = async (id: number) => {
     await supabase.from('flashcards').delete().eq('id', id);
