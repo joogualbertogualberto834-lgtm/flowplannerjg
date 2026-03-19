@@ -34,7 +34,14 @@ import {
     ChevronDown,
     Brain,
     Pin,
-    Bell
+    Bell,
+    Sliders,
+    Stethoscope,
+    Rocket,
+    Play,
+    Pause,
+    Square,
+    RotateCcw
 } from 'lucide-react';
 import {
     LineChart,
@@ -132,6 +139,7 @@ interface ExamEntry {
     durationMinutes: number;
     date: string;
     errorSubthemes: string[]; // List of subthemes missed
+    questionsTotal?: number; // Added for mission sync
 }
 
 interface Flashcard {
@@ -140,6 +148,7 @@ interface Flashcard {
     back: string;
     specialty: string;
     theme: string;
+    subtheme?: string;
     level: 'easy' | 'medium' | 'hard';
     nextReview: string;
     box: number;
@@ -349,12 +358,18 @@ const FlashcardsDashboard = ({
     flashcards, 
     onAddCard, 
     onStudyPending, 
-    onStudyDifficult 
+    onStudyDifficult,
+    onStudyCustom,
+    onEditCard,
+    onDeleteCard
 }: { 
     flashcards: Flashcard[], 
     onAddCard: () => void,
     onStudyPending: () => void,
-    onStudyDifficult: () => void
+    onStudyDifficult: () => void,
+    onStudyCustom: () => void,
+    onEditCard: (card: Flashcard) => void,
+    onDeleteCard: (id: string) => void
 }) => {
     const [selectedSpec, setSelectedSpec] = useState<string>('Geral');
     const [searchQuery, setSearchQuery] = useState('');
@@ -437,9 +452,15 @@ const FlashcardsDashboard = ({
                     </div>
                     <button 
                         onClick={onStudyDifficult}
-                        className="bg-rose-50 text-rose-600 px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+                        className="bg-rose-50 text-rose-600 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-rose-600 hover:text-white transition-all shadow-sm"
                     >
-                        <Flame size={16} /> Estudar Difíceis
+                        <Flame size={14} /> Estudar Difíceis
+                    </button>
+                    <button 
+                        onClick={onStudyCustom}
+                        className="bg-indigo-50 text-indigo-600 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                    >
+                        <Sliders size={14} /> Revisão Personalizada
                     </button>
                 </div>
 
@@ -456,13 +477,37 @@ const FlashcardsDashboard = ({
                         {filteredCards.map(card => (
                             <div key={card.id} className="glass-card p-6 rounded-3xl border border-white/50 shadow-sm hover:shadow-md transition-all group">
                                 <div className="flex justify-between items-start mb-4">
-                                    <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-wider">{card.theme}</span>
-                                    <span className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase ${card.level === 'hard' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                        {card.level === 'hard' ? 'Difícil' : 'Bom'}
-                                    </span>
+                                    <div className="flex flex-wrap gap-2">
+                                        <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-600 uppercase tracking-wider">{card.theme}</span>
+                                        {card.subtheme && (
+                                            <span className="px-3 py-1 bg-indigo-50 rounded-full text-[10px] font-black text-indigo-600 uppercase tracking-wider border border-indigo-100/50">{card.subtheme}</span>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => onEditCard(card)}
+                                            className="p-1.5 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all"
+                                        >
+                                            <Settings size={14} />
+                                        </button>
+                                        <button 
+                                            onClick={() => onDeleteCard(card.id)}
+                                            className="p-1.5 bg-rose-50 text-rose-400 hover:text-rose-600 hover:bg-white rounded-lg transition-all"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                        <span className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase ${card.level === 'hard' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                            {card.level === 'hard' ? 'Difícil' : 'Bom'}
+                                        </span>
+                                    </div>
                                 </div>
                                 <h4 className="font-bold text-slate-800 mb-2 line-clamp-2">{card.front}</h4>
-                                <p className="text-xs text-slate-400 font-medium">Próxima revisão: {card.nextReview}</p>
+                                <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-50">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Revisão</span>
+                                    <span className="text-[10px] font-bold text-slate-600">
+                                        {new Date(card.nextReview).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                                    </span>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -1081,6 +1126,235 @@ const Sparkline = ({ data }: { data: number[] }) => {
     );
 };
 
+// ════════════════ MISSÃO DE LONGO PRAZO ════════════════
+const MISSION_TARGET = 7000;
+const MISSION_START_DATE = new Date('2026-01-01');
+const MISSION_END_DATE = new Date('2026-11-20');
+
+// ════════════════ COMPONENTES DE APOIO DASHBOARD ════════════════
+function FlashcardMiniPlayer({ flashcards }: { flashcards: Flashcard[] }) {
+    const [index, setIndex] = useState(0);
+    const [showBack, setShowBack] = useState(false);
+
+    useEffect(() => {
+        if (flashcards.length === 0) return;
+        const itv = setInterval(() => {
+            setIndex(Math.floor(Math.random() * flashcards.length));
+            setShowBack(false);
+        }, 45000);
+        return () => clearInterval(itv);
+    }, [flashcards.length]);
+
+    if (flashcards.length === 0) return <p className="text-[10px] text-slate-300 font-bold italic">Nenhum flashcard salvo</p>;
+
+    const card = flashcards[index];
+    return (
+        <div 
+            className="flex flex-col items-center justify-center h-full w-full cursor-pointer select-none group"
+            onClick={() => setShowBack(!showBack)}
+        >
+            <div className="px-3 py-1 bg-indigo-50 rounded-full text-[8px] font-black text-indigo-600 uppercase tracking-widest mb-3 group-hover:bg-indigo-100 transition-colors">
+                {card.theme}
+            </div>
+            <div className="max-w-[200px]">
+                <p className={`text-xs font-bold text-slate-700 leading-tight transition-all duration-300 ${showBack ? 'scale-105' : ''}`}>
+                    {showBack ? card.back : card.front}
+                </p>
+            </div>
+            <div className="mt-4 flex flex-col items-center gap-1">
+                <p className="text-[8px] text-slate-300 font-black uppercase tracking-widest">{showBack ? 'Resposta' : 'Pergunta'}</p>
+                <div className="w-8 h-1 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-400 animate-progress-45" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function TodayFocus({ reviews, todayStr }: { reviews: ReviewEntry[], todayStr: string }) {
+    const todayReviews = reviews.filter(r => r.scheduledDate === todayStr || r.completedDate === todayStr).slice(0, 4);
+    
+    if (todayReviews.length === 0) return (
+        <div className="flex flex-col items-center justify-center text-center">
+            <p className="text-xs text-slate-300 font-bold italic">Nenhum estudo hoje</p>
+        </div>
+    );
+
+    return (
+        <div className="flex flex-col items-start w-full gap-2 px-1 py-1">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Foco de Hoje</span>
+            <div className="space-y-2 w-full">
+                {todayReviews.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2 w-full group/item">
+                        <div className="w-1 h-3 rounded-full bg-emerald-400 group-hover/item:scale-y-125 transition-transform" />
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-black text-slate-800 truncate">{r.theme}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{r.specialty}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function PomodoroTimer({ onComplete }: { onComplete: (mins: number) => void }) {
+    const [timeLeft, setTimeLeft] = useState(25 * 60);
+    const [isActive, setIsActive] = useState(false);
+    const [initialTime] = useState(25 * 60);
+
+    useEffect(() => {
+        let interval: any = null;
+        if (isActive && timeLeft > 0) {
+            interval = setInterval(() => {
+                setTimeLeft(prev => prev - 1);
+            }, 1000);
+        } else if (timeLeft === 0) {
+            setIsActive(false);
+            onComplete(25);
+            setTimeLeft(25 * 60);
+        }
+        return () => clearInterval(interval);
+    }, [isActive, timeLeft, onComplete]);
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const handleStop = () => {
+        if (isActive || timeLeft < initialTime) {
+            const elapsedMins = Math.floor((initialTime - timeLeft) / 60);
+            if (elapsedMins > 0) onComplete(elapsedMins);
+            setIsActive(false);
+            setTimeLeft(initialTime);
+        }
+    };
+
+    return (
+        <div className="relative z-10 w-full h-full flex flex-col items-center justify-center space-y-4">
+            <div className="text-5xl font-digital text-white tracking-widest leading-none drop-shadow-lg">
+                {formatTime(timeLeft)}
+            </div>
+            <div className="flex gap-4">
+                <button 
+                    onClick={() => setIsActive(!isActive)}
+                    className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md hover:bg-white/30 transition-all shadow-xl active:scale-95"
+                >
+                    {isActive ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" className="ml-1" />}
+                </button>
+                <button 
+                    onClick={handleStop}
+                    className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md hover:bg-white/20 transition-all shadow-lg active:scale-95"
+                >
+                    <Square size={20} fill="white" />
+                </button>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+                <p className="text-white font-black uppercase text-[10px] tracking-[0.2em]">Foco Ativo</p>
+                <div className="flex gap-1">
+                    {[1, 2, 3, 4].map(idx => (
+                        <div key={idx} className={`w-1 h-1 rounded-full ${idx === 1 ? 'bg-white' : 'bg-white/20'}`} />
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function LongTermMission({ total, onAdd }: { total: number, onAdd: (n: number) => void }) {
+    const today = new Date();
+    const totalDays = (MISSION_END_DATE.getTime() - MISSION_START_DATE.getTime()) / (1000 * 60 * 60 * 24);
+    const daysPassed = (today.getTime() - MISSION_START_DATE.getTime()) / (1000 * 60 * 60 * 24);
+    const progressPerc = Math.min(100, (total / MISSION_TARGET) * 100);
+    
+    const idealProgress = Math.round((daysPassed / totalDays) * MISSION_TARGET);
+    const isBehind = total < idealProgress;
+    
+    const hour = today.getHours();
+    const isInWindow = hour >= 10 && hour <= 23;
+    
+    let statusMsg = "Trajetória estável. Continue assim!";
+    let alertMode = false;
+
+    if (isBehind) {
+        alertMode = true;
+        const diff = idealProgress - total;
+        statusMsg = `Perdendo altitude! Faça ${Math.min(10, diff)} questões agora para retomar o curso.`;
+    } else if (isInWindow) {
+        statusMsg = "Janela de propulsão ativa: só mais 5 questões agora!";
+    }
+
+    const [inputValue, setInputValue] = useState('');
+
+    return (
+        <div className="w-full flex flex-col items-center justify-center space-y-4">
+             {/* Dynamic Badge */}
+             <div className={`px-4 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm ${alertMode ? 'bg-rose-500 text-white animate-pulse' : 'bg-emerald-500 text-white'}`}>
+                {alertMode ? 'Alerta' : 'Nominal'}
+            </div>
+
+            <div className="flex items-center gap-6 w-full justify-center">
+                {/* Mini Vertical Track */}
+                <div className="relative h-32 w-10 flex flex-col items-center justify-between py-2">
+                    <div className="absolute top-0 bottom-0 w-[1.5px] bg-slate-200/30 rounded-full" />
+                    
+                    <Stethoscope size={12} className="text-indigo-400 relative z-10" />
+                    
+                    <div 
+                        className="absolute z-20 w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-lg border border-slate-100 transition-all duration-1000 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+                        style={{ bottom: `${progressPerc}%`, transform: 'translateY(50%)' }}
+                    >
+                         <div className="relative">
+                            <Rocket size={16} className={`${alertMode ? 'text-rose-500' : 'text-indigo-600'} transition-colors duration-500`} />
+                            {progressPerc > 0 && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-amber-400 blur-sm animate-pulse" />}
+                         </div>
+                    </div>
+
+                    <Flame size={12} className="text-amber-500 relative z-10" />
+                </div>
+
+                {/* Compact Stats */}
+                <div className="text-left space-y-3">
+                    <div>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Missão Aprovação</h3>
+                        <p className="text-xl font-black text-slate-800 tabular-nums">{total}</p>
+                        <p className="text-[9px] font-bold text-slate-400">/ {MISSION_TARGET} Questões</p>
+                    </div>
+
+                    <div className="flex gap-1.5">
+                        <input 
+                            type="number"
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            placeholder="+"
+                            className="w-12 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5 text-[10px] font-black text-center focus:border-indigo-400 transition-all outline-none"
+                        />
+                        <button 
+                            onClick={() => {
+                                const val = parseInt(inputValue);
+                                if(val > 0) {
+                                    onAdd(val);
+                                    setInputValue('');
+                                }
+                            }}
+                            className="bg-slate-900 text-white w-8 h-8 rounded-lg flex items-center justify-center hover:bg-black active:scale-95 transition-all shadow-sm"
+                        >
+                            <Rocket size={12} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Tiny Msg */}
+            <p className="text-[9px] font-bold text-slate-500 leading-tight italic max-w-[120px] line-clamp-2">
+                "{statusMsg}"
+            </p>
+        </div>
+    );
+}
+
 // ════════════════ VIEW PRINCIPAL ════════════════
 
 interface MedFlow2ViewProps {
@@ -1101,12 +1375,24 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
     });
     const [flashcards, setFlashcards] = useState<Flashcard[]>(() => {
         const saved = localStorage.getItem('medflow2_flashcards');
-        return saved ? JSON.parse(saved) : [];
+        const parsed = saved ? JSON.parse(saved) : [];
+        return parsed.map((fc: any) => ({
+            ...fc,
+            subtheme: fc.subtheme || ''
+        }));
     });
     const [errors, setErrors] = useState<ErrorEntry2[]>(() => {
         const saved = localStorage.getItem('medflow2_errors');
         return saved ? JSON.parse(saved) : [];
     });
+    const [totalQuestions, setTotalQuestions] = useState<number>(() => {
+        const saved = localStorage.getItem('medflow2_total_questions');
+        return saved ? parseInt(saved, 10) : 0;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('medflow2_total_questions', totalQuestions.toString());
+    }, [totalQuestions]);
     const [showRegisterErrorModal, setShowRegisterErrorModal] = useState(false);
     const [showCompleteModal, setShowCompleteModal] = useState<ReviewEntry | null>(null);
     const [showRelocateModal, setShowRelocateModal] = useState<ReviewEntry | null>(null);
@@ -1119,6 +1405,7 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
     const [modalQuestCorrect, setModalQuestCorrect] = useState(16);
     const [modalIsHot, setModalIsHot] = useState(false);
     const [modalIsSimulado, setModalIsSimulado] = useState(false);
+    const [examQuestTotal, setExamQuestTotal] = useState(100);
 
     // Chart selections
     const [chartSpec, setChartSpec] = useState(SPECIALTIES[0]?.name || '');
@@ -1133,10 +1420,23 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
     const [regSubtheme, setRegSubtheme] = useState('');
 
     const [showAddFlashcardModal, setShowAddFlashcardModal] = useState(false);
+    const [showCustomStudyModal, setShowCustomStudyModal] = useState(false);
+    const [editingFlashcard, setEditingFlashcard] = useState<Flashcard | null>(null);
+    
+    // Custom Study Filters
+    const [customSpec, setCustomSpec] = useState('');
+    const [customTheme, setCustomTheme] = useState('');
+    const [customSubtheme, setCustomSubtheme] = useState('');
+
+    // Undo System
+    const [lastAction, setLastAction] = useState<{ type: string, data: any } | null>(null);
+    const [showUndoToast, setShowUndoToast] = useState(false);
+
     const [fcFront, setFcFront] = useState('');
     const [fcBack, setFcBack] = useState('');
     const [fcSpec, setFcSpec] = useState(SPECIALTIES[0]?.name || '');
     const [fcTheme, setFcTheme] = useState('');
+    const [fcSubtheme, setFcSubtheme] = useState('');
 
     const [studyingCards, setStudyingCards] = useState<Flashcard[] | null>(null);
     const [currentFcIndex, setCurrentFcIndex] = useState(0);
@@ -1144,34 +1444,100 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
 
     const handleAddFlashcard = () => {
         if (!fcFront || !fcBack) return;
-        const newCard: Flashcard = {
-            id: Math.random().toString(36).substr(2, 9),
-            front: fcFront,
-            back: fcBack,
-            specialty: fcSpec,
-            theme: fcTheme,
-            level: 'medium',
-            nextReview: new Date().toISOString(),
-            box: 0
-        };
-        setFlashcards([newCard, ...flashcards]);
+
+        if (fcSubtheme) {
+            saveSubtheme(fcSubtheme);
+            setSavedSubthemes(loadSubthemes());
+        }
+
+        if (editingFlashcard) {
+            setFlashcards(prev => prev.map(c => c.id === editingFlashcard.id ? {
+                ...c,
+                front: fcFront,
+                back: fcBack,
+                specialty: fcSpec,
+                theme: fcTheme,
+                subtheme: fcSubtheme
+            } : c));
+            setEditingFlashcard(null);
+        } else {
+            const newCard: Flashcard = {
+                id: generateId(),
+                front: fcFront,
+                back: fcBack,
+                specialty: fcSpec,
+                theme: fcTheme,
+                subtheme: fcSubtheme,
+                level: 'medium',
+                nextReview: new Date().toISOString(),
+                box: 0
+            };
+            setFlashcards([newCard, ...flashcards]);
+        }
         setShowAddFlashcardModal(false);
         setFcFront('');
         setFcBack('');
         setFcTheme('');
+        setFcSubtheme('');
     };
 
-    const startStudy = (filter: 'pending' | 'difficult') => {
+    const setUndoAction = (type: string, data: any) => {
+        setLastAction({ type, data });
+        setShowUndoToast(true);
+        // Toast is handled in UI
+    };
+
+    const handleUndo = () => {
+        if (!lastAction) return;
+        if (lastAction.type === 'delete_review') {
+            setReviews(prev => [...prev, ...lastAction.data]);
+        } else if (lastAction.type === 'delete_flashcard') {
+            setFlashcards(prev => [...prev, lastAction.data]);
+        } else if (lastAction.type === 'delete_exam') {
+            setExams(prev => [...prev, lastAction.data]);
+        }
+        setLastAction(null);
+        setShowUndoToast(false);
+    };
+
+    const handleDeleteFlashcard = (id: string) => {
+        const card = flashcards.find(c => c.id === id);
+        if (card) setUndoAction('delete_flashcard', card);
+        setFlashcards(prev => prev.filter(c => c.id !== id));
+    };
+
+    const handleEditFlashcard = (card: Flashcard) => {
+        setEditingFlashcard(card);
+        setFcFront(card.front);
+        setFcBack(card.back);
+        setFcSpec(card.specialty);
+        setFcTheme(card.theme);
+        setFcSubtheme(card.subtheme || '');
+        setShowAddFlashcardModal(true);
+    };
+
+    const startStudy = (filter: 'pending' | 'difficult' | 'custom') => {
         let cards = [...flashcards];
         if (filter === 'pending') {
             cards = cards.filter(c => new Date(c.nextReview) <= new Date());
-        } else {
+        } else if (filter === 'difficult') {
             cards = cards.filter(c => c.level === 'hard');
+        } else {
+            cards = cards.filter(c => {
+                const specMatch = !customSpec || c.specialty === customSpec;
+                const themeMatch = !customTheme || c.theme === customTheme;
+                const subthemeMatch = !customSubtheme || (c as any).subtheme === customSubtheme;
+                return specMatch && themeMatch && subthemeMatch;
+            });
         }
+        
         if (cards.length > 0) {
-            setStudyingCards(cards);
+            setStudyingCards(cards.sort(() => Math.random() - 0.5));
             setCurrentFcIndex(0);
             setShowFcBack(false);
+            setShowCustomStudyModal(false);
+        } else {
+            alert('Nenhum flashcard encontrado para estes filtros!');
         }
     };
 
@@ -1379,6 +1745,7 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
         }
 
         setReviews(prev => [...prev, study, ...chain]);
+        setTotalQuestions(prev => prev + (regQuestTotal || 0));
         setShowRegisterModal(false);
 
         // Reset form partially
@@ -1388,10 +1755,16 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
     };
 
     const handleDeleteExam = (id: string) => {
+        const exam = exams.find(e => e.id === id);
+        if (exam) setUndoAction('delete_exam', exam);
+        
         setExams(prev => prev.filter(e => e.id !== id));
+        // Also remove errors associated with this exam
+        setErrors(prev => prev.filter(err => err.examId !== id));
     };
 
     const [editingExamId, setEditingExamId] = useState<string | null>(null);
+    const [viewDate, setViewDate] = useState(new Date());
 
     const startEditingExam = (exam: ExamEntry) => {
         setEditingExamId(exam.id);
@@ -1415,7 +1788,8 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
             score: examScore,
             durationMinutes: examMinutes,
             date: examDate,
-            errorSubthemes: examErrors
+            errorSubthemes: examErrors,
+            questionsTotal: examQuestTotal
         };
 
         if (editingExamId) {
@@ -1437,6 +1811,8 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                 }));
                 setErrors(prev => [...newErrors, ...prev]);
             }
+            
+            setTotalQuestions(prev => prev + (examQuestTotal || 0));
         }
 
         setShowRegisterExamModal(false);
@@ -1471,7 +1847,7 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
 
         const updatedReview: ReviewEntry = {
             ...showCompleteModal,
-            completedDate: todayStr,
+            completedDate: showCompleteModal.completedDate || todayStr,
             score: modalScore,
             questionsTotal: modalQuestTotal,
             questionsCorrect: modalQuestCorrect,
@@ -1481,26 +1857,32 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
             isSimuladoReal: modalIsSimulado,
         };
 
-        // Calculate next review in chain
-        const nextInterval = calcNextInterval(modalScore, modalIsHot, modalIsSimulado, showCompleteModal.rescheduleCount);
-        const nextSched = addDays(todayStr, nextInterval);
+        // Auto-propulsion: Increment total questions from the completed review
+        setTotalQuestions(prev => prev + (modalQuestTotal || 0));
 
-        const nextReview: ReviewEntry = {
-            id: generateId(),
-            label: `R - ${showCompleteModal.chainIndex + 1} `,
-            specialty: showCompleteModal.specialty,
-            theme: showCompleteModal.theme,
-            scheduledDate: nextSched,
-            status: calcStatus(nextSched),
-            isHot: modalIsHot,
-            isSimuladoReal: false,
-            rescheduleCount: 0,
-            parentId: showCompleteModal.id,
-            chainIndex: showCompleteModal.chainIndex + 1,
-            reviewRule: showCompleteModal.reviewRule
-        };
+        // Calculate next review in chain ONLY if it's the first time completing
+        if (!showCompleteModal.completedDate) {
+            const nextInterval = calcNextInterval(modalScore, modalIsHot, modalIsSimulado, showCompleteModal.rescheduleCount);
+            const nextSched = addDays(todayStr, nextInterval);
 
-        setReviews(prev => prev.map(r => r.id === showCompleteModal.id ? updatedReview : r).concat(nextReview));
+            const nextReview: ReviewEntry = {
+                id: generateId(),
+                label: `R - ${showCompleteModal.chainIndex + 1} `,
+                specialty: showCompleteModal.specialty,
+                theme: showCompleteModal.theme,
+                scheduledDate: nextSched,
+                status: calcStatus(nextSched),
+                isHot: modalIsHot,
+                isSimuladoReal: false,
+                rescheduleCount: 0,
+                parentId: showCompleteModal.id,
+                chainIndex: showCompleteModal.chainIndex + 1,
+                reviewRule: showCompleteModal.reviewRule
+            };
+            setReviews(prev => prev.map(r => r.id === showCompleteModal.id ? updatedReview : r).concat(nextReview));
+        } else {
+            setReviews(prev => prev.map(r => r.id === showCompleteModal.id ? updatedReview : r));
+        }
         setShowCompleteModal(null);
     };
 
@@ -1522,7 +1904,18 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
     };
 
     const handleDeleteReview = (id: string) => {
-        setReviews(prev => prev.filter(r => r.id !== id));
+        const reviewToDelete = reviews.find(r => r.id === id);
+        if (!reviewToDelete) return;
+
+        // Capture what will be deleted for Undo (including chain)
+        const chainToDelete = reviews.filter(r => r.id === id || r.parentId === id);
+        setUndoAction('delete_review', chainToDelete);
+
+        setReviews(prev => {
+            let updated = prev.filter(r => r.id !== id);
+            updated = updated.filter(r => r.parentId !== id);
+            return updated;
+        });
         setShowCompleteModal(null);
         setShowRelocateModal(null);
     };
@@ -1627,6 +2020,14 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                     </div>
                     <p className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase">Sólido</p>
                 </div>
+
+                {/* MISSÃO LONG PRAZO - WIDGET COMPACTO */}
+                <div className="flex-1 glass-card rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center overflow-hidden">
+                    <LongTermMission 
+                        total={totalQuestions} 
+                        onAdd={(n) => setTotalQuestions(prev => prev + n)} 
+                    />
+                </div>
             </div>
 
             {/* Sub-tabs Minimal */}
@@ -1697,8 +2098,8 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                                             </button>
                                         </div>
                                     )) : (
-                                        <div className="p-8 border-2 border-dashed border-slate-100 rounded-2xl text-center">
-                                            <p className="text-xs text-slate-300 font-bold italic">Nenhum atraso</p>
+                                        <div className="p-8 border-2 border-dashed border-slate-100 rounded-2xl text-center flex items-center justify-center min-h-[140px]">
+                                            <TodayFocus reviews={reviews} todayStr={todayStr} />
                                         </div>
                                     )}
                                 </div>
@@ -1721,8 +2122,8 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                                             </button>
                                         </div>
                                     )) : (
-                                        <div className="p-8 border-2 border-dashed border-slate-100 rounded-2xl text-center">
-                                            <p className="text-xs text-slate-300 font-bold italic">Dia livre!</p>
+                                        <div className="p-8 border-2 border-dashed border-slate-100 rounded-2xl text-center flex items-center justify-center min-h-[140px]">
+                                            <FlashcardMiniPlayer flashcards={flashcards} />
                                         </div>
                                     )}
                                 </div>
@@ -1785,19 +2186,34 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
 
                     {/* Sidebar Area (Desktop only) */}
                     <div className="lg:col-span-4 space-y-8">
-                         {/* Action Button Prominent */}
-                         <button
-                            onClick={() => setShowRegisterModal(true)}
-                            className="w-full glass bg-white/80 hover:bg-white text-slate-900 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 group transition-all transform hover:-translate-y-2 border-none shadow-2xl"
-                        >
-                            <div className="w-16 h-16 bg-slate-900 text-white rounded-[1.8rem] flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
-                                <Zap size={28} />
-                            </div>
-                            <div className="text-center">
-                                <p className="text-lg font-black tracking-tight">Registrar Estudo</p>
-                                <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Alimentar Motor</p>
-                            </div>
-                        </button>
+                         <div className="w-full glass-card p-8 rounded-[2.5rem] flex flex-col items-center justify-center text-center group transition-all bg-blue-600 text-white shadow-2xl relative overflow-hidden min-h-[220px]">
+                            <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-blue-700 opacity-90" />
+                            <PomodoroTimer onComplete={(mins) => {
+                                const study: ReviewEntry = {
+                                    id: generateId(),
+                                    label: 'POMO',
+                                    specialty: 'Foco Ativo',
+                                    theme: 'Sessão Pomodoro',
+                                    subtheme: 'Cronômetro Automático',
+                                    scheduledDate: todayStr,
+                                    completedDate: todayStr,
+                                    score: 100,
+                                    questionsTotal: Math.floor(mins * 0.5),
+                                    questionsCorrect: Math.floor(mins * 0.5),
+                                    durationMinutes: mins,
+                                    status: 'done',
+                                    isHot: false,
+                                    isSimuladoReal: false,
+                                    rescheduleCount: 0,
+                                    chainIndex: 0,
+                                    reviewRule: R_RULES.ACERTOS
+                                };
+                                setReviews(prev => [...prev, study]);
+                                setTotalQuestions(prev => prev + study.questionsTotal);
+                                setLastAction({ type: 'ADD_STUDY', data: study });
+                                setShowUndoToast(true);
+                            }} />
+                        </div>
 
                         <div className="glass-card p-6 rounded-[2.5rem] space-y-6">
                             <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-2">Performance por Área</h3>
@@ -1814,6 +2230,50 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+
+                        {/* Recent History */}
+                        <div className="glass-card p-6 rounded-[2.5rem] space-y-6">
+                             <div className="flex items-center justify-between px-2">
+                                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Atividades Recentes</h3>
+                                <History size={14} className="text-slate-300" />
+                             </div>
+                             <div className="space-y-3">
+                                {reviews.filter(r => r.status === 'done').sort((a,b) => new Date(b.completedDate || '').getTime() - new Date(a.completedDate || '').getTime()).slice(0, 5).map(r => (
+                                    <div key={r.id} className="p-3 bg-slate-50 rounded-2xl border border-transparent hover:border-slate-100 transition-all group">
+                                        <div className="flex justify-between items-start mb-1">
+                                            <p className="text-[10px] font-black text-slate-800 truncate pr-2">{r.theme}</p>
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                <button 
+                                                    onClick={() => {
+                                                        setShowCompleteModal(r);
+                                                        setModalScore(r.score || 80);
+                                                        setModalMinutes(r.durationMinutes || 45);
+                                                        setModalQuestTotal(r.questionsTotal || 20);
+                                                        setModalQuestCorrect(r.questionsCorrect || 16);
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-indigo-600"
+                                                >
+                                                    <Settings size={10} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteReview(r.id)}
+                                                    className="p-1 text-slate-400 hover:text-rose-600"
+                                                >
+                                                    <Trash2 size={10} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-center text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                                            <span>{r.score}% • {r.durationMinutes}m</span>
+                                            <span>{new Date(r.completedDate || '').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {reviews.filter(r => r.status === 'done').length === 0 && (
+                                    <p className="text-[9px] text-slate-300 font-bold italic text-center py-4">Nenhuma atividade registrada.</p>
+                                )}
+                             </div>
                         </div>
                     </div>
                 </div>
@@ -1842,11 +2302,16 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
             {activeSubTab === 'flashcards' && (
                 <FlashcardsDashboard 
                     flashcards={flashcards} 
-                    onAddCard={() => setShowAddFlashcardModal(true)} 
+                    onAddCard={() => { setEditingFlashcard(null); setShowAddFlashcardModal(true); }} 
                     onStudyPending={() => startStudy('pending')} 
                     onStudyDifficult={() => startStudy('difficult')} 
+                    onStudyCustom={() => setShowCustomStudyModal(true)}
+                    onEditCard={handleEditFlashcard}
+                    onDeleteCard={handleDeleteFlashcard}
                 />
             )}
+            
+            {/* End of Section */}
 
             {
                 activeSubTab === 'calendario' && (
@@ -1854,11 +2319,37 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                         <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-100 shadow-sm overflow-hidden">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                                 <div>
-                                    <h3 className="text-xl font-bold text-slate-800">Calendário de Revisões</h3>
-                                    <p className="text-xs text-slate-400 font-medium">Arraste revisões atrasadas para reagendar ou clique para concluir.</p>
+                                    <div className="flex items-center gap-4 mb-1">
+                                         <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">
+                                            {viewDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+                                        </h3>
+                                        <div className="flex gap-1">
+                                            <button 
+                                                onClick={() => {
+                                                    const d = new Date(viewDate);
+                                                    d.setMonth(d.getMonth() - 1);
+                                                    setViewDate(d);
+                                                }}
+                                                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"
+                                            >
+                                                <ChevronLeft size={20} />
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    const d = new Date(viewDate);
+                                                    d.setMonth(d.getMonth() + 1);
+                                                    setViewDate(d);
+                                                }}
+                                                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"
+                                            >
+                                                <ChevronRight size={20} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-400 font-medium italic opacity-80">Revisões</p>
                                 </div>
                                 <div className="flex flex-wrap gap-3 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-300" /> PE</div>
+                                    <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-200" /> PE</div>
                                     <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> Concluída</div>
                                     <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-400" /> Futura</div>
                                     <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-rose-400" /> Atrasada</div>
@@ -1869,68 +2360,84 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                                 {['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.'].map(d => (
                                     <div key={d} className="bg-slate-50/80 backdrop-blur-sm p-3 text-center text-[10px] font-black text-slate-400 uppercase tracking-tighter">{d}</div>
                                 ))}
-                                {Array.from({ length: 42 }).map((_, i) => {
-                                    const d = new Date();
-                                    d.setDate(d.getDate() - d.getDay() + i);
-                                    const dStr = toDateStr(d);
-                                    const dayReviews = reviews.filter(r => r.scheduledDate === dStr);
-                                    const isToday = dStr === todayStr;
+                                {(() => {
+                                    const firstDayOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+                                    const startDate = new Date(firstDayOfMonth);
+                                    startDate.setDate(1 - firstDayOfMonth.getDay());
+                                    
+                                    return Array.from({ length: 42 }).map((_, i) => {
+                                        const d = new Date(startDate);
+                                        d.setDate(startDate.getDate() + i);
+                                        const dStr = toDateStr(d);
+                                        const dayReviews = reviews.filter(r => r.scheduledDate === dStr);
+                                        const isToday = dStr === todayStr;
+                                        const isCurrentMonth = d.getMonth() === viewDate.getMonth();
 
-                                    return (
-                                        <div
-                                            key={i}
-                                            onDragOver={(e) => e.preventDefault()}
-                                            onDrop={() => {
-                                                if (draggedReviewId) {
-                                                    const review = reviews.find(r => r.id === draggedReviewId);
-                                                    if (review) {
-                                                        setRelocateDate(dStr);
-                                                        setShowRelocateModal(review);
+                                        return (
+                                            <div
+                                                key={i}
+                                                onDragOver={(e) => e.preventDefault()}
+                                                onDrop={() => {
+                                                    if (draggedReviewId) {
+                                                        const review = reviews.find(r => r.id === draggedReviewId);
+                                                        if (review) {
+                                                            setRelocateDate(dStr);
+                                                            setShowRelocateModal(review);
+                                                        }
+                                                        setDraggedReviewId(null);
                                                     }
-                                                    setDraggedReviewId(null);
-                                                }
-                                            }}
-                                            className={`bg-white min-h-[120px] p-1.5 flex flex-col gap-1.5 transition-all hover:bg-slate-50/80 group ${isToday ? 'bg-emerald-50/20' : ''}`}
-                                        >
-                                            <div className="flex justify-between items-start px-1 pt-0.5">
-                                                <p className={`text-[10px] font-black ${isToday ? 'text-emerald-600' : 'text-slate-300 group-hover:text-slate-500'}`}>{d.getDate()}</p>
-                                                {isToday && <div className="w-1 h-1 rounded-full bg-emerald-500" />}
-                                            </div>
+                                                }}
+                                                className={`bg-white min-h-[120px] p-1.5 flex flex-col gap-1.5 transition-all hover:bg-slate-50/80 group ${isToday ? 'bg-emerald-50/20' : ''} ${!isCurrentMonth ? 'bg-slate-50/40' : ''}`}
+                                            >
+                                                <div className="flex justify-between items-start px-1 pt-0.5">
+                                                    <p className={`text-[10px] font-black ${isToday ? 'text-emerald-600' : 'text-slate-300 group-hover:text-slate-500'}`}>{d.getDate()}</p>
+                                                    {isToday && <div className="w-1 h-1 rounded-full bg-emerald-500" />}
+                                                </div>
 
-                                            <div className="flex flex-col gap-1 overflow-y-auto max-h-[100px] scrollbar-hide pr-0.5">
-                                                {dayReviews.map(r => {
-                                                    const status = r.label === 'PE' ? 'pe' : r.status;
-                                                    const colorClasses =
-                                                        status === 'pe' ? 'bg-slate-100 text-slate-500 border-slate-200' :
-                                                            status === 'done' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                                status === 'overdue' ? 'bg-rose-50 text-rose-600 border-rose-100 cursor-move' :
-                                                                    'bg-blue-50 text-blue-600 border-blue-100';
+                                                <div className="flex flex-col gap-1 overflow-y-auto max-h-[100px] scrollbar-hide pr-0.5">
+                                                    {dayReviews.map(r => {
+                                                        const status = r.label === 'PE' ? 'pe' : r.status;
+                                                        const colorClasses =
+                                                            status === 'pe' ? 'bg-slate-100 text-slate-500 border-slate-200' :
+                                                                status === 'done' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                                                    status === 'overdue' ? 'bg-rose-50 text-rose-600 border-rose-100 cursor-move' :
+                                                                        'bg-blue-50 text-blue-600 border-blue-100';
 
-                                                    return (
-                                                        <div
-                                                            key={r.id}
-                                                            draggable={status === 'overdue'}
-                                                            onDragStart={() => setDraggedReviewId(r.id)}
-                                                            onClick={() => {
-                                                                if (status === 'done') return;
-                                                                if (status === 'overdue') {
-                                                                    setRelocateDate(r.scheduledDate);
-                                                                    setShowRelocateModal(r);
-                                                                } else {
-                                                                    setShowCompleteModal(r);
-                                                                }
-                                                            }}
-                                                            className={`px-1.5 py-1 rounded-md text-[8px] font-black border uppercase tracking-tight flex items-center justify-between gap-1 shadow-sm transition-all hover:brightness-95 active:scale-95 ${colorClasses}`}
-                                                        >
-                                                            <span className="truncate">{r.label} | {r.theme}</span>
-                                                            {r.isHot && <Flame size={8} className="fill-current shrink-0" />}
-                                                        </div>
-                                                    );
-                                                })}
+                                                        return (
+                                                            <div
+                                                                key={r.id}
+                                                                draggable={status === 'overdue'}
+                                                                onDragStart={() => setDraggedReviewId(r.id)}
+                                                                onClick={() => {
+                                                                    if (status === 'done') {
+                                                                        setShowCompleteModal(r);
+                                                                        setModalScore(r.score || 80);
+                                                                        setModalMinutes(r.durationMinutes || 45);
+                                                                        setModalQuestTotal(r.questionsTotal || 20);
+                                                                        setModalQuestCorrect(r.questionsCorrect || 16);
+                                                                        setModalIsHot(r.isHot);
+                                                                        setModalIsSimulado(r.isSimuladoReal);
+                                                                        return;
+                                                                    }
+                                                                    if (status === 'overdue') {
+                                                                        setRelocateDate(r.scheduledDate);
+                                                                        setShowRelocateModal(r);
+                                                                    } else {
+                                                                        setShowCompleteModal(r);
+                                                                    }
+                                                                }}
+                                                                className={`px-1.5 py-1 rounded-md text-[8px] font-black border uppercase tracking-tight flex items-center justify-between gap-1 shadow-sm transition-all hover:brightness-95 active:scale-95 ${colorClasses}`}
+                                                            >
+                                                                <span className="truncate">{r.label} | {r.theme}</span>
+                                                                {r.isHot && <Flame size={8} className="fill-current shrink-0" />}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    });
+                                })()}
                             </div>
                         </div>
 
@@ -2338,6 +2845,16 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                                                 className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-indigo-600 focus:border-indigo-500 focus:bg-white transition-all outline-none"
                                             />
                                         </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Total Questões</label>
+                                            <input
+                                                type="number"
+                                                value={examQuestTotal}
+                                                onChange={(e) => setExamQuestTotal(parseInt(e.target.value) || 0)}
+                                                onFocus={(e) => e.target.select()}
+                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 focus:border-indigo-500 focus:bg-white transition-all outline-none"
+                                            />
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Tempo Gasto (min)</label>
@@ -2418,13 +2935,108 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                 )
             }
 
+            {/* CUSTOM STUDY MODAL */}
+            {showCustomStudyModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[3rem] w-full max-w-lg shadow-2xl overflow-hidden border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
+                        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Revisão Personalizada</h3>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Filtre seus Cards</p>
+                            </div>
+                            <button onClick={() => setShowCustomStudyModal(false)} className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg hover:bg-slate-50 transition-all text-slate-400">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="p-8 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Especialidade (Opcional)</label>
+                                <select
+                                    value={customSpec}
+                                    onChange={(e) => { setCustomSpec(e.target.value); setCustomTheme(''); setCustomSubtheme(''); }}
+                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 transition-all outline-none"
+                                >
+                                    <option value="">Todas as Especialidades</option>
+                                    {SPECIALTIES.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Tema (Opcional)</label>
+                                <select
+                                    value={customTheme}
+                                    onChange={(e) => { setCustomTheme(e.target.value); setCustomSubtheme(''); }}
+                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 transition-all outline-none"
+                                >
+                                    <option value="">Todos os Temas</option>
+                                    {customSpec && SPECIALTIES.find(s => s.name === customSpec)?.themes.map(t => (
+                                        <option key={t} value={t}>{t}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Subtema (Opcional)</label>
+                                <select
+                                    value={customSubtheme}
+                                    onChange={(e) => setCustomSubtheme(e.target.value)}
+                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 transition-all outline-none shadow-sm"
+                                >
+                                    <option value="">Todos os Subtemas</option>
+                                    {savedSubthemes.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
+                            
+                            <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center gap-3">
+                                <Info size={18} className="text-indigo-500 shrink-0" />
+                                <p className="text-[10px] text-indigo-700 font-bold leading-relaxed">
+                                    O sistema selecionará todos os flashcards que correspondem aos filtros acima para uma sessão de estudo aleatória.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-8 bg-slate-50/50 flex gap-4">
+                            <button onClick={() => setShowCustomStudyModal(false)} className="flex-1 py-5 text-slate-400 font-black tracking-widest hover:text-slate-600 transition-colors uppercase text-xs">Cancelar</button>
+                            <button
+                                onClick={() => startStudy('custom')}
+                                className="flex-[2] py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-3xl shadow-xl shadow-indigo-100 transition-all transform hover:-translate-y-1 active:scale-95 uppercase text-xs tracking-widest"
+                            >
+                                Iniciar Revisão
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* UNDO TOAST */}
+            {showUndoToast && (
+                <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-bottom-8 duration-300">
+                    <div className="bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 border border-white/10 backdrop-blur-xl">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-rose-400">
+                                <Trash2 size={16} />
+                            </div>
+                            <span className="text-sm font-bold">Item excluído com sucesso</span>
+                        </div>
+                        <button 
+                            onClick={handleUndo}
+                            className="bg-emerald-500 hover:bg-emerald-600 text-slate-900 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all transform hover:scale-105 active:scale-95"
+                        >
+                            Desfazer
+                        </button>
+                    </div>
+                </div>
+            )}
             {/* FLASHCARD MODAL */}
             {showAddFlashcardModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white rounded-[3rem] w-full max-w-xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
                         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
                             <div>
-                                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Novo Flashcard</h3>
+                                <h3 className="text-2xl font-black text-slate-800 tracking-tight">
+                                    {editingFlashcard ? 'Editar Flashcard' : 'Novo Flashcard'}
+                                </h3>
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Memorização Ativa</p>
                             </div>
                             <button onClick={() => setShowAddFlashcardModal(false)} className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg hover:bg-slate-50 transition-all text-slate-400">
@@ -2433,28 +3045,50 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                         </div>
                         
                         <div className="p-8 space-y-8 overflow-y-auto">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Especialidade</label>
-                                    <select
-                                        value={fcSpec}
-                                        onChange={(e) => setFcSpec(e.target.value)}
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 focus:bg-white transition-all outline-none"
-                                    >
-                                        {SPECIALTIES.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                                    </select>
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">ESPECIALIDADE (OPCIONAL)</label>
+                                        <select
+                                            value={fcSpec}
+                                            onChange={(e) => { setFcSpec(e.target.value); setFcTheme(''); }}
+                                            className="w-full bg-slate-50/50 border-2 border-slate-100 rounded-[1.5rem] px-6 py-5 font-bold text-slate-700 focus:border-indigo-500 focus:bg-white transition-all outline-none appearance-none shadow-sm"
+                                        >
+                                            <option value="">Selecione a Especialidade</option>
+                                            {SPECIALTIES.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        </select>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">TEMA (OPCIONAL)</label>
+                                        <select
+                                            value={fcTheme}
+                                            onChange={(e) => setFcTheme(e.target.value)}
+                                            className="w-full bg-slate-50/50 border-2 border-slate-100 rounded-[1.5rem] px-6 py-5 font-bold text-slate-700 focus:border-indigo-500 focus:bg-white transition-all outline-none appearance-none shadow-sm"
+                                        >
+                                            <option value="">Selecione o Tema</option>
+                                            {fcSpec && SPECIALTIES.find(s => s.name === fcSpec)?.themes.map(t => (
+                                                <option key={t} value={t}>{t}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">SUBTEMA (LIVRE - SE TORNA SELECIONÁVEL)</label>
+                                        <div className="relative group">
+                                            <input
+                                                type="text"
+                                                value={fcSubtheme}
+                                                onChange={(e) => setFcSubtheme(e.target.value)}
+                                                placeholder="Ex: SEPSE, HAS..."
+                                                className="w-full bg-indigo-50/10 border-2 border-indigo-500 rounded-[1.5rem] px-6 py-5 font-bold text-slate-700 focus:bg-white transition-all outline-none shadow-[0_0_0_1px_rgba(99,102,241,0.1)] placeholder:text-slate-300"
+                                                list="fc-subthemes-list"
+                                            />
+                                            <datalist id="fc-subthemes-list">
+                                                {savedSubthemes.map(s => <option key={s} value={s} />)}
+                                            </datalist>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-1">Tema</label>
-                                    <input
-                                        type="text"
-                                        value={fcTheme}
-                                        onChange={(e) => setFcTheme(e.target.value)}
-                                        placeholder="Ex: SEPSE"
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold focus:border-indigo-500 focus:bg-white transition-all outline-none"
-                                    />
-                                </div>
-                            </div>
 
                             <div className="space-y-4">
                                 <div>
@@ -2484,7 +3118,7 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                                 onClick={handleAddFlashcard}
                                 className="flex-[2] py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-3xl shadow-xl shadow-indigo-100 transition-all transform hover:-translate-y-1 active:scale-95 uppercase text-xs tracking-widest"
                             >
-                                Criar Flashcard
+                                {editingFlashcard ? 'Salvar Alterações' : 'Criar Flashcard'}
                             </button>
                         </div>
                     </div>
@@ -2523,9 +3157,9 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                                     
                                     <div className="flex justify-center gap-4">
                                         {[
-                                            { id: 'hard', label: 'Difícil', color: 'bg-rose-500 shadow-rose-100', icon: <X size={16} /> },
-                                            { id: 'medium', label: 'Bom', color: 'bg-amber-500 shadow-amber-100', icon: <Check size={16} /> },
-                                            { id: 'easy', label: 'Fácil', color: 'bg-emerald-500 shadow-emerald-100', icon: <CheckCircle2 size={16} /> }
+                                            { id: 'hard', label: 'Ruim', color: 'bg-rose-500 shadow-rose-100', icon: <X size={16} /> },
+                                            { id: 'medium', label: 'Bom', color: 'bg-indigo-500 shadow-indigo-100', icon: <Check size={16} /> },
+                                            { id: 'easy', label: 'Excelente', color: 'bg-emerald-500 shadow-emerald-100', icon: <CheckCircle2 size={16} /> }
                                         ].map(btn => (
                                             <button
                                                 key={btn.id}
