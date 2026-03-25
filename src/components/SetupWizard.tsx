@@ -6,7 +6,6 @@ import {
     Zap, Clock, Moon, Dumbbell, Sparkles,
     ChevronRight, Info
 } from 'lucide-react';
-import { saveExam, addPersonalGoal } from '../services/api';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -114,29 +113,32 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
     const handleFinish = async () => {
         setIsSaving(true);
         try {
+            const prefs = {
+                exams: [] as { id: string; name: string; date: string }[],
+                weeklyGoal: 150,
+                sleepHours,
+                exerciseDays
+            };
+
             // 1. Save Exams
             for (const examId of selectedExams) {
                 if (examId === 'custom') {
                     for (const custom of customExams) {
                         if (custom.name && custom.date) {
-                            await saveExam({
+                            prefs.exams.push({
+                                id: `custom-${custom.name}`,
                                 name: custom.name,
-                                date: custom.date,
-                                type: 'simulado',
-                                specialties: [],
-                                notes: null
+                                date: custom.date
                             });
                         }
                     }
                 } else {
                     const preset = PRESET_EXAMS.find(p => p.id === examId);
                     if (preset) {
-                        await saveExam({
+                        prefs.exams.push({
+                            id: preset.id,
                             name: preset.name,
-                            date: preset.estimatedDate,
-                            type: preset.id === 'custom' ? 'simulado' : 'prova_integra',
-                            specialties: [],
-                            notes: preset.note || null
+                            date: preset.estimatedDate
                         });
                     }
                 }
@@ -146,33 +148,11 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip }) 
             if (prepLevel) {
                 const selectedLevel = PREP_LEVELS.find(l => l.id === prepLevel);
                 if (selectedLevel) {
-                    await addPersonalGoal({
-                        category: 'estudo',
-                        title: 'Questões semanais',
-                        unit: 'questões',
-                        target_value: selectedLevel.target
-                    });
+                    prefs.weeklyGoal = selectedLevel.target;
                 }
             }
 
-            // 3. Sleep Goal
-            await addPersonalGoal({
-                category: 'saude',
-                title: 'Sono por noite',
-                unit: 'horas',
-                target_value: sleepHours
-            });
-
-            // 4. Exercise Goal
-            if (exerciseDays > 0) {
-                await addPersonalGoal({
-                    category: 'exercicio',
-                    title: 'Exercícios na semana',
-                    unit: 'sessões',
-                    target_value: exerciseDays
-                });
-            }
-
+            localStorage.setItem('medflow2_user_prefs', JSON.stringify(prefs));
             localStorage.setItem('medflow_wizard_done', 'true');
             await onComplete();
         } catch (error) {

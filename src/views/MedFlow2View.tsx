@@ -60,6 +60,7 @@ import {
 } from 'recharts';
 import { SPECIALTIES } from '../constants';
 import { Topic } from '../services/types';
+import { Mentor2 } from '../components/Mentor2';
 
 // ════════════════ CÉREBRO BLINDADO ════════════════
 // Não editar — base matemática do algoritmo de revisão espaçada
@@ -1214,9 +1215,7 @@ const Sparkline = ({ data }: { data: number[] }) => {
 };
 
 // ════════════════ MISSÃO DE LONGO PRAZO ════════════════
-const MISSION_TARGET = 7000;
 const MISSION_START_DATE = new Date('2026-01-01');
-const MISSION_END_DATE = new Date('2026-11-20');
 
 // ════════════════ COMPONENTES DE APOIO DASHBOARD ════════════════
 function FlashcardMiniPlayer({ flashcards }: { flashcards: Flashcard[] }) {
@@ -1350,13 +1349,13 @@ function PomodoroTimer({ onComplete }: { onComplete: (mins: number) => void }) {
     );
 }
 
-function LongTermMission({ total, onAdd }: { total: number, onAdd: (n: number) => void }) {
+function LongTermMission({ total, target, endDate, onAdd }: { total: number, target: number, endDate: Date, onAdd: (n: number) => void }) {
     const today = new Date();
-    const totalDays = (MISSION_END_DATE.getTime() - MISSION_START_DATE.getTime()) / (1000 * 60 * 60 * 24);
+    const totalDays = (endDate.getTime() - MISSION_START_DATE.getTime()) / (1000 * 60 * 60 * 24);
     const daysPassed = (today.getTime() - MISSION_START_DATE.getTime()) / (1000 * 60 * 60 * 24);
-    const progressPerc = Math.min(100, (total / MISSION_TARGET) * 100);
+    const progressPerc = Math.min(100, (total / target) * 100);
     
-    const idealProgress = Math.round((daysPassed / totalDays) * MISSION_TARGET);
+    const idealProgress = Math.round((daysPassed / totalDays) * target);
     const isBehind = total < idealProgress;
     
     const hour = today.getHours();
@@ -1407,7 +1406,7 @@ function LongTermMission({ total, onAdd }: { total: number, onAdd: (n: number) =
                     <div>
                         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Missão Aprovação</h3>
                         <p className="text-xl font-black text-slate-800 tabular-nums">{total}</p>
-                        <p className="text-[9px] font-bold text-slate-400">/ {MISSION_TARGET} Questões</p>
+                        <p className="text-[9px] font-bold text-slate-400">/ {target} Questões</p>
                     </div>
 
                     <div className="flex gap-1.5">
@@ -1451,6 +1450,7 @@ interface MedFlow2ViewProps {
 
 export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
     const [activeSubTab, setActiveSubTab] = useState<ReviewSubTab>('painel');
+    const [userPrefs, setUserPrefs] = useState<any>(null);
     const [reviews, setReviews] = useState<ReviewEntry[]>(() => {
         const saved = localStorage.getItem('medflow2_reviews');
         return saved ? JSON.parse(saved) : [];
@@ -1476,6 +1476,15 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
         const saved = localStorage.getItem('medflow2_total_questions');
         return saved ? parseInt(saved, 10) : 0;
     });
+
+    useEffect(() => {
+        const prefsRaw = localStorage.getItem('medflow2_user_prefs');
+        if (prefsRaw) {
+            try {
+                setUserPrefs(JSON.parse(prefsRaw));
+            } catch (e) {}
+        }
+    }, []);
 
     useEffect(() => {
         localStorage.setItem('medflow2_total_questions', totalQuestions.toString());
@@ -2143,11 +2152,26 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
 
                 {/* MISSÃO LONG PRAZO - WIDGET COMPACTO */}
                 <div className="flex-1 glass-card rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 flex flex-col items-center justify-center text-center overflow-hidden">
-
-                    <LongTermMission 
-                        total={totalQuestions} 
-                        onAdd={(n) => setTotalQuestions(prev => prev + n)} 
-                    />
+                    {(() => {
+                        let endDate = new Date('2026-11-20');
+                        let target = 7000;
+                        if (userPrefs?.exams && userPrefs.exams.length > 0) {
+                            const futureExams = userPrefs.exams.map((e: any) => new Date(e.date)).filter((d: Date) => d > new Date());
+                            if (futureExams.length > 0) endDate = new Date(Math.min(...futureExams.map((d: Date) => d.getTime())));
+                        }
+                        if (userPrefs?.weeklyGoal) {
+                            const totalDays = (endDate.getTime() - new Date('2026-01-01').getTime()) / (1000 * 60 * 60 * 24);
+                            target = Math.round((totalDays / 7) * userPrefs.weeklyGoal);
+                        }
+                        return (
+                            <LongTermMission 
+                                total={totalQuestions} 
+                                target={target}
+                                endDate={endDate}
+                                onAdd={(n) => setTotalQuestions(prev => prev + n)} 
+                            />
+                        );
+                    })()}
                 </div>
             </div>
 
@@ -3318,6 +3342,7 @@ export function MedFlow2View({ topics, onUpdate }: MedFlow2ViewProps) {
                     </div>
                 </div>
             )}
+            <Mentor2 />
         </div>
     );
 }

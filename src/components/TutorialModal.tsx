@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
     CheckCircle2, ArrowLeft, ArrowRight,
     Target, Zap, PlayCircle, AlertCircle,
-    X, Trophy, BookOpen
+    X, Trophy, BookOpen, Brain
 } from 'lucide-react';
 
 interface TutorialModalProps {
@@ -13,40 +13,40 @@ interface TutorialModalProps {
 
 const steps = [
     {
-        title: "Bem-vindo ao MedFlow",
-        text: "Seu segundo cérebro para a residência médica. Você insere os dados — erros, provas, metas — e o sistema organiza tudo automaticamente. Sem IA. Sem adivinhação. Só seus dados.",
+        title: "Bem-vindo ao MedFlow 2.0",
+        text: "Seu hub de estudos focado, ultrarrápido e offline-first. Todo o seu progresso fica salvo no seu próprio dispositivo, garantindo máxima velocidade para você focar no que importa: a aprovação.",
         icon: <PlayCircle size={32} className="text-emerald-500" />,
         color: "bg-emerald-50"
     },
     {
-        title: "Caderno de Oportunidades",
-        text: "Após cada simulado, registre cada erro em 3 passos: escolha a especialidade e o tema do seu cronograma, escreva o subtema específico (ex: 'Acalásia — critério manometria') e selecione a origem — Desatenção, Falta de Contato ou Cansaço. Erros de Falta de Contato viram flashcards automaticamente.",
-        icon: <BookOpen size={32} className="text-rose-500" />,
-        color: "bg-rose-50"
-    },
-    {
-        title: "Revisão Espaçada",
-        text: "Flashcards criados dos seus erros seguem intervalos baseados em evidência científica: 1, 3, 7, 14 e 30 dias. Ao revisar, avalie se lembrou com facilidade, com esforço ou não lembrou. O sistema ajusta o próximo intervalo automaticamente.",
+        title: "O Painel Central",
+        text: "Seu centro de comando. Acompanhe a sua Missão de Longo Prazo, veja estatísticas de consistência e saiba exatamente o que revisar através do botão 'Estudar Agora'.",
         icon: <Target size={32} className="text-blue-500" />,
         color: "bg-blue-50"
     },
     {
-        title: "Temas de Estudo",
-        text: "Registre os temas que você estudou e sua performance. O sistema aplica revisão espaçada e avisa quando você precisa revisar cada tema antes que esqueça.",
-        icon: <AlertCircle size={32} className="text-amber-500" />,
-        color: "bg-amber-50"
+        title: "Provas e Simulados",
+        text: "Registre seus resultados em detalhes. O sistema evolui seu mapa de desempenho, destacando pontuações por banca e identificando precisamente onde você perde os pontos mais cruciais.",
+        icon: <Trophy size={32} className="text-yellow-500" />,
+        color: "bg-yellow-50"
     },
     {
-        title: "Calendário e Metas",
-        text: "Cadastre suas provas e simulados com a data exata. Acompanhe o D-Day automaticamente. Crie metas semanais de estudo, saúde e exercício — o sistema calcula sua meta diária e mostra o impacto do sono no seu desempenho.",
+        title: "Caderno de Erros Ativo",
+        text: "Não apenas anote: mapeie cada questão errada pelo real motivo (Falta de Contato, Desatenção ou Cansaço). Transforme os pontos cegos diretamente em Flashcards com um único clique.",
+        icon: <AlertCircle size={32} className="text-rose-500" />,
+        color: "bg-rose-50"
+    },
+    {
+        title: "Flashcards Espaçados",
+        text: "Suas armas de retenção. O algoritmo distribuído em 5 caixas calcula os intervalos ideais de repetição, moldando os novos contatos de acordo com a sua dificuldade e taxa de acerto.",
         icon: <Zap size={32} className="text-purple-500" />,
         color: "bg-purple-50"
     },
     {
-        title: "Aba de Desempenho",
-        text: "Depois de algumas semanas de uso, o Índice MedFlow (0-100) resume toda sua preparação em um número. Veja onde estão suas lacunas, sua consistência e se seu ritmo é sustentável até a prova.",
-        icon: <Trophy size={32} className="text-yellow-500" />,
-        color: "bg-yellow-50"
+        title: "A Dupla Opção: Livre vs Mentor",
+        text: "Modo MedFlow Livre: Navegue, faça questões avulsas ou leia LDI na sua aba favorita. Sem cobranças. \n\nModo Mentor 2.0 (Opcional): Clique no Cérebro flutuante e o Mentor te guiará com rigor matemático, exigindo % de teoria vs prática, simulados randomizados e revisões ativas de 15 em 15 dias. Adote o modo que quiser a qualquer momento do seu dia!",
+        icon: <Brain size={32} className="text-indigo-500" />,
+        color: "bg-indigo-50"
     }
 ];
 

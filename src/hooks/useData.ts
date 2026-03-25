@@ -5,14 +5,14 @@ import {
     fetchFlashcardsDue,
     fetchAllFlashcards,
     fetchFlashcardStats,
-    fetchErrors,
+    fetchExamErrors,
 } from '../services/api';
 import type {
     Topic,
     DashboardStats,
     Flashcard,
     FlashcardStats,
-    ErrorNote,
+    ExamError,
 } from '../services/types';
 
 export interface AppData {
@@ -21,7 +21,7 @@ export interface AppData {
     flashcards: Flashcard[];
     allFlashcards: Flashcard[];
     flashcardStats: FlashcardStats | null;
-    errors: ErrorNote[];
+    errors: ExamError[];
     loading: boolean;
     // Erro de carregamento — exibido na UI sem travar o app
     fetchError: string | null;
@@ -39,7 +39,7 @@ export function useData(): AppData {
     const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
     const [allFlashcards, setAllFlashcards] = useState<Flashcard[]>([]);
     const [flashcardStats, setFlashcardStats] = useState<FlashcardStats | null>(null);
-    const [errors, setErrors] = useState<ErrorNote[]>([]);
+    const [errors, setErrors] = useState<ExamError[]>([]);
     const [loading, setLoading] = useState(true);
     // Captura erros de rede e de Supabase sem derrubar o app
     const [fetchError, setFetchError] = useState<string | null>(null);
@@ -54,14 +54,14 @@ export function useData(): AppData {
                 flashcardsData,
                 allFlashcardsData,
                 statsData,
-                errorsData,
+                errorsData,  // Now fetches from exam_errors table
             ] = await Promise.all([
                 fetchTopics(),
                 fetchDashboard(),
                 fetchFlashcardsDue(),
                 fetchAllFlashcards(),
                 fetchFlashcardStats(),
-                fetchErrors(),
+                fetchExamErrors(),
             ]);
 
             if (topicsData) setTopics(topicsData);
